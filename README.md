@@ -283,7 +283,9 @@ Dettagli in [`tests/README.md`](tests/README.md).
   li aggregherebbe automaticamente se presenti.
 - Una fattura fuori perimetro (senza `CFOR`) esce nel report come `Fornitore non disponibile`,
   anche quando il suo XML riporta la denominazione: il nome viene propagato tramite il codice
-  fornitore, che in quel caso manca.
+  fornitore, che in quel caso manca. Il caso è oggi considerato non significativo — si assume che
+  ogni fattura abbia almeno un carico — ma è documentato nella cella del report insieme alle
+  possibili strade, se in futuro non fosse più vero.
 - `RiferimentoAmministrazione` viene trattato come un normale `CodiceArticolo` (tipo virtuale
   `RiferimentoAmministrazione`). Un eventuale trattamento dedicato va deciso.
 - Se una fattura risulta associata a più `CFOR` il notebook lo segnala e tiene il primo in ordine
