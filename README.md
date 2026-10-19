@@ -262,7 +262,22 @@ Il file contiene valori, non formule: nessun ricalcolo lato Excel.
 
 ---
 
-## 10. Limiti noti
+## 10. Test
+
+Il notebook si può eseguire in locale senza Fabric, su dati sintetici:
+
+```bash
+pip install pandas openpyxl
+python tests/verifica.py
+```
+
+Sostituisce solo `notebookutils`, le letture Excel e la scrittura su OneLake; il codice del notebook
+viene eseguito così com'è. Esce con `0` se tutti i controlli passano, `1` se qualcuno fallisce.
+Dettagli in [`tests/README.md`](tests/README.md).
+
+---
+
+## 11. Limiti noti
 
 - `AliquotaIVA` e `CodiceFiscale` a livello di linea non vengono ancora estratti: la sezione `[13]`
   li aggregherebbe automaticamente se presenti.
