@@ -70,7 +70,7 @@ Le 16 sezioni sono marcate da commenti `# %% [n]`.
 |---|---|---|
 | 1 | Configurazione e sorgenti | percorsi, nomi fogli, filtro documento |
 | 2 | Lettura XML dallo ZIP | `xml_in_memoria`, elenco errori per file |
-| 3 | Esplosione righe e codici | `df_xml_fatture` (1 riga per linea), `df_xml_codici_articolo` (formato lungo) |
+| 3 | Esplosione righe e codici | `df_xml_fatture` (1 riga per linea, con `DataDDT` e `Denominazione`), `df_xml_codici_articolo` (formato lungo) |
 | 4 | Normalizzazione | funzioni `normalizza()`, `valore_pulito()`, … |
 | 5 | Dizionari | mappe di lookup + diagnostica anomalie |
 | 6 | Diagnostica dizionario | blocco di sola lettura, rimovibile |
@@ -96,6 +96,10 @@ il report e lo salva in `export/riconciliazione_powerbi.xlsx` (un solo foglio `d
   allegati;
 - un file può contenere più `FatturaElettronicaBody`: vengono trattati come documenti distinti
   (colonna `IndiceBodyXML`);
+- la denominazione del fornitore viene letta da `CedentePrestatore/DatiAnagrafici/Anagrafica`
+  (`Denominazione`, oppure `Nome` + `Cognome` per le persone fisiche) e riportata su ogni riga di
+  linea: da lì arriva a `df_merge` e al report, dove viene propagata a tutte le righe dello stesso
+  fornitore, comprese quelle `Solo carico`;
 - `DatiDDT` può contenere più blocchi, ciascuno con `NumeroDDT`, `DataDDT` (facoltativa) ed
   eventuali `RiferimentoNumeroLinea`. Se il DDT non cita alcuna linea vale per l'intera fattura,
   ma solo quando esiste **un solo** `NumeroDDT` distinto e **nessun** `RiferimentoNumeroLinea`;
@@ -260,8 +264,11 @@ Il file contiene valori, non formule: nessun ricalcolo lato Excel.
 
 ## 10. Limiti noti
 
-- `AliquotaIVA`, `CodiceFiscale` e `Denominazione` a livello di linea non vengono ancora estratti:
-  la sezione `[13]` li aggregherebbe automaticamente se presenti.
+- `AliquotaIVA` e `CodiceFiscale` a livello di linea non vengono ancora estratti: la sezione `[13]`
+  li aggregherebbe automaticamente se presenti.
+- Una fattura fuori perimetro (senza `CFOR`) esce nel report come `Fornitore non disponibile`,
+  anche quando il suo XML riporta la denominazione: il nome viene propagato tramite il codice
+  fornitore, che in quel caso manca.
 - `RiferimentoAmministrazione` viene trattato come un normale `CodiceArticolo` (tipo virtuale
   `RiferimentoAmministrazione`). Un eventuale trattamento dedicato va deciso.
 - Se una fattura risulta associata a più `CFOR` il notebook lo segnala e tiene il primo in ordine
