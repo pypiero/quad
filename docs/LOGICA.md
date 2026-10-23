@@ -160,7 +160,7 @@ Il confronto procede a cascata: si usa il primo livello che trova qualcosa.
 | `df_fatture` | riga di carico | [7]-[10] |
 | `map_ddt` | coppia DDT XML ↔ DDT carico | [14] |
 | `df_merge` | riga riconciliata (XML, carico o entrambe) | [15] |
-| `df_powerbi` | come `df_merge`, 21 colonne | blocco finale |
+| `df_powerbi` | come `df_merge`, 24 colonne | blocco finale |
 
 **Questo è il punto più importante da capire**: i due lati arrivano al merge con granularità
 diverse. L'XML parte da *linee* e arriva ad *articoli*; i carichi partono già da *articoli*. Se le
@@ -586,7 +586,7 @@ permette di risalire a ogni passaggio.
 ## 6. Il blocco finale: il report
 
 La seconda cella del notebook costruisce `df_powerbi` e lo salva in
-`export/riconciliazione_powerbi.xlsx` (un foglio, 21 colonne).
+`export/riconciliazione_powerbi.xlsx` (un foglio, 24 colonne).
 
 ### 6.1 `coalesce_colonne`
 
@@ -601,10 +601,13 @@ opzionali, che potrebbero non esistere.
 |---|---|---|---|
 | `Fattura` | `NumeroFattura` (XML) | `mersy_n_fattura(NDOGIAA)` | `Senza fattura` |
 | `Data fattura` | `DataFattura` | `mersy_data_fattura(TDATIAA)` | — |
+| `CEAS` | solo `mersy_archiviazione_ottica(CEAS)` | — | — |
+| `CFOR` | `Fornitore_consolidato` | — | — |
+| `Denominazione` | etichetta `(CFOR) Nome` | — | — |
 | `Bolla` | `NumeroDDT_Comune` | — | `Senza DDT` |
 | `Data bolla` | `DataDDT` | `DataDDT_XML`, `mersy_data_DDT(TDATIAB)` | — |
 | `Descrizione` | `Descrizione` | `mersy_descrizione_articolo(XART)` | `Descrizione non disponibile` |
-| `Numero riga fattura` | `NumeriLineaXML` | `StatoAbbinamento` | — |
+| `Numero riga fattura` | `NumeriLineaXML` | — | — (vuoto senza lato XML) |
 | `Unità di misura` | `UnitaMisura` | `mersy_um_prezzo(CUMF)` | — |
 | `Codice articolo interno` | `Codice Art. Cliente` | `mersy_articolo(CART)` | — |
 | `Codice articolo fornitore` | `Codice Art. Fornitore` | `mersy_articolo_fornitore(CALA)` | — |
@@ -617,9 +620,13 @@ opzionali, che potrebbero non esistere.
 | `Totale XML` | `PrezzoTotale` | — | — |
 | `Totale Mersy` | `mersy_importo_ns_accettazione(Importo_ns_fattura)` | — | — |
 | `Differenza totali` | `Totale XML − Totale Mersy` | — | — |
-| `CFOR` | `Fornitore_consolidato` (CFOR XML, altrimenti Mersy) | — | — |
-| `Denominazione` | etichetta `Nome (CFOR)` | — | — |
+| `CPCO` | `mersy_punto_consegna(CPCO)` | — | — (vuoto senza carico) |
+| `CPCO descrizione` | `mersy_descrizione_punto_consegna(XPCO)` | — | — |
 | `Stato abbinamento` | `StatoAbbinamento` | — | — |
+
+`CEAS`, `CPCO` e la sua descrizione arrivano **solo dal lato carichi**: sulle righe `Solo XML`
+restano vuote. È corretto: una bolla non ancora consegnata non ha punto di consegna, e nell'XML il
+`CEAS` non è un dato del documento ma il nome del file.
 
 Le differenze si calcolano **dopo** il coalesce: se manca un lato, la differenza è vuota (non zero).
 Questo è voluto: "non ho il dato" e "differenza zero" sono due cose diverse.
@@ -629,7 +636,7 @@ Questo è voluto: "non ho il dato" e "differenza zero" sono due cose diverse.
 1. `Fornitore_consolidato` = CFOR dell'XML, altrimenti quello dei carichi;
 2. mappa `CFOR → Denominazione` costruita dalle righe che hanno entrambi;
 3. ogni riga riceve il nome cercando il proprio CFOR nella mappa;
-4. `crea_etichetta_fornitore` compone `Nome (CFOR)`, oppure `Nome`, oppure `CFOR`, oppure
+4. `crea_etichetta_fornitore` compone `(CFOR) Nome`, oppure `(CFOR)`, oppure `Nome`, oppure
    `Fornitore non disponibile`.
 
 **Limite noto**: una fattura fuori perimetro non ha CFOR, quindi non trova il nome nella mappa ed
@@ -812,14 +819,15 @@ Contiene tutto `df_xml_righe` (23 colonne), tutte le colonne dei carichi (26), i
 `NumeroRigheFattura`, `NumeroRigheFatturaGlobale`, `DDTCarico*`), gli stati (`TipoMatch`,
 `StatoDocumento`, `StatoAbbinamento`) e `NumeroDDT_Comune`.
 
-### `df_powerbi` (21 colonne, il report)
+### `df_powerbi` (24 colonne, il report)
 
 ```
-Fattura, Data fattura, Bolla, Data bolla, Descrizione, Numero riga fattura,
-Unità di misura, Codice articolo interno, Codice articolo fornitore, Codice EAN,
+Fattura, Data fattura, CEAS, CFOR, Denominazione, Bolla, Data bolla,
+CPCO, CPCO descrizione, Descrizione, Numero riga fattura, Unità di misura,
+Codice articolo interno, Codice articolo fornitore, Codice EAN,
 Quantità XML, Quantità carico, Differenza quantità, Prezzo unitario XML,
 Prezzo unitario carico, Totale XML, Totale Mersy, Differenza totali,
-CFOR, Denominazione, Stato abbinamento
+Stato abbinamento
 ```
 
 ### Funzioni, sezione per sezione

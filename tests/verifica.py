@@ -345,7 +345,7 @@ def verifica_perimetro(df_fatture):
     )
 
 
-def verifica_export(cartella_output, df_powerbi):
+def verifica_export(cartella_output, df_powerbi, namespace):
     titolo(8, "EXPORT E TIPI DELLE CELLE (celle [16])")
 
     for nome in ("riconciliazione.xlsx", "riconciliazione_powerbi.xlsx"):
@@ -385,9 +385,10 @@ def verifica_export(cartella_output, df_powerbi):
             )
 
     for colonna in (
-        "Fattura", "Bolla", "Codice EAN", "Codice articolo interno",
-        "Codice articolo fornitore", "Numero riga fattura", "CFOR",
-        "Denominazione", "Stato abbinamento",
+        "Fattura", "CEAS", "CFOR", "Denominazione", "Bolla",
+        "CPCO descrizione", "Codice EAN", "Codice articolo interno",
+        "Codice articolo fornitore", "Numero riga fattura",
+        "Stato abbinamento",
     ):
         controlla(
             f"xlsx: {colonna} = testo",
@@ -396,9 +397,23 @@ def verifica_export(cartella_output, df_powerbi):
         )
 
     controlla(
-        "il report ha 21 colonne",
-        len(intestazioni) == 21,
+        "il report ha 24 colonne",
+        len(intestazioni) == 24,
         f"trovate {len(intestazioni)}",
+    )
+
+    controlla(
+        "CPCO e' numerico",
+        tipi.get("CPCO", set()) <= {"n"},
+        str(tipi.get("CPCO")),
+    )
+
+    controlla(
+        "ordine delle colonne come da specifica",
+        intestazioni[:6] == [
+            "Fattura", "Data fattura", "CEAS", "CFOR", "Denominazione", "Bolla",
+        ],
+        str(intestazioni[:6]),
     )
 
     # la colonna CFOR deve coincidere con il codice fornitore usato
@@ -415,11 +430,45 @@ def verifica_export(cartella_output, df_powerbi):
             str(valori_cfor),
         )
 
+    dataset = namespace["df_powerbi"]
+
+    controlla(
+        "etichetta fornitore nella forma '(CFOR) Nome'",
+        dataset.loc[dataset["CFOR"].eq("F001"), "Denominazione"]
+        .eq("(F001) FORNITORE 00001 SRL").any(),
+        str(sorted(set(dataset["Denominazione"].dropna()))),
+    )
+    controlla(
+        "Numero riga fattura vuoto sulle righe Solo carico",
+        dataset.loc[
+            dataset["Stato abbinamento"].eq("Solo carico"), "Numero riga fattura"
+        ].isna().all(),
+        str(dataset.loc[dataset["Stato abbinamento"].eq("Solo carico"),
+                        "Numero riga fattura"].tolist()),
+    )
+    controlla(
+        "CEAS popolato solo sulle righe con carico",
+        dataset.loc[dataset["Stato abbinamento"].ne("Solo XML"), "CEAS"]
+        .notna().all()
+        and dataset.loc[dataset["Stato abbinamento"].eq("Solo XML"), "CEAS"]
+        .isna().all(),
+        str(dataset[["Stato abbinamento", "CEAS"]].to_dict("records")),
+    )
+    controlla(
+        "CPCO valorizzato solo sulle righe con carico",
+        dataset.loc[dataset["Stato abbinamento"].ne("Solo XML"), "CPCO"]
+        .notna().all()
+        and dataset.loc[dataset["Stato abbinamento"].eq("Solo XML"), "CPCO"]
+        .isna().all(),
+        str(dataset[["Stato abbinamento", "CPCO"]].to_dict("records")),
+    )
+
     print()
     print("Dataset del report:")
     print(mostra(df_powerbi[[
-        "Fattura", "Data fattura", "Bolla", "Data bolla", "Codice EAN",
-        "Quantità XML", "Quantità carico", "Denominazione",
+        "Fattura", "CEAS", "CFOR", "Denominazione", "Bolla",
+        "CPCO", "CPCO descrizione", "Codice EAN",
+        "Quantità XML", "Quantità carico", "Numero riga fattura",
         "Stato abbinamento",
     ]]))
 
@@ -455,7 +504,11 @@ def main():
     verifica_codici(namespace["df_xml_righe"])
     verifica_dizionario(namespace["dizionari"])
     verifica_perimetro(namespace["df_fatture"])
-    verifica_export(namespace["_cartella_output"], namespace["df_powerbi"])
+    verifica_export(
+        namespace["_cartella_output"],
+        namespace["df_powerbi"],
+        namespace,
+    )
 
     return stampa_riepilogo()
 
