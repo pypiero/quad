@@ -134,7 +134,8 @@ def verifica_denominazione(df_xml_fatture, df_xml_righe, df_merge):
                 "Denominazione",
             ]
         ) == {"FORNITORE 00001 SRL", "FORNITORE 00002 SRL",
-              "FORNITORE 00003 SRL"},
+              "FORNITORE 00003 SRL", "FORNITORE 00013 SRL",
+              "FORNITORE 00014 SRL"},
         str(sorted(set(df_xml_fatture["Denominazione"]))),
     )
     controlla(
@@ -195,6 +196,8 @@ def verifica_merge(df_merge):
         ("00002", "CART|C002", "CART", "Abbinato", "DATA_UNIVOCA"),
         ("7", "FORN|F22-1", "CALA", "Abbinato", "UNICO_RESIDUO_DATA_MANCANTE"),
         ("9", "RIGA DESCRITTIVA|1", "Nessun match", "Solo XML", None),
+        ("00013", "EAN|8001111111111", "EAN", "Abbinato", None),
+        ("00014", "EAN|8001111111111", "Nessun match", "Solo XML", None),
     ]
 
     for fattura, chiave, tipo, stato, metodo in attesi:
@@ -223,7 +226,7 @@ def verifica_merge(df_merge):
 
     controlla(
         "righe carico senza riscontro XML -> Solo carico",
-        len(solo_carico) == 2
+        len(solo_carico) == 4
         and "ARTICOLO EXTRA"
         in set(solo_carico["mersy_descrizione_articolo(XART)"]),
         str(solo_carico[["mersy_descrizione_articolo(XART)"]].to_dict("records")),
@@ -238,26 +241,102 @@ def verifica_merge(df_merge):
         "Senza DDT" in set(df_merge["NumeroDDT_Comune"]),
     )
     controlla(
-        "merge senza duplicati (10 righe)",
-        len(df_merge) == 10,
+        "merge senza duplicati (14 righe)",
+        len(df_merge) == 14,
         str(len(df_merge)),
     )
     controlla(
         "ogni riga XML compare una volta sola",
-        int(df_merge["ID_Riga_XML"].notna().sum()) == 8
+        int(df_merge["ID_Riga_XML"].notna().sum()) == 10
         and df_merge["ID_Riga_XML"].dropna().is_unique,
         str(int(df_merge["ID_Riga_XML"].notna().sum())),
     )
     controlla(
         "ogni riga carico compare una volta sola",
-        int(df_merge["Indice"].notna().sum()) == 7
+        int(df_merge["Indice"].notna().sum()) == 10
         and df_merge["Indice"].dropna().is_unique,
         str(int(df_merge["Indice"].notna().sum())),
     )
 
 
+def verifica_ddt_derivato(df_merge):
+    titolo(5, "XML SENZA DDT: DDT UNICO DEL CARICO E CASO AMBIGUO")
+
+    colonne = [
+        "NumeroFattura", "ChiaveDDT_ComuneXML", "OrigineChiaveDDT",
+        "DDTDistintiCarico", "StatoDocumento", "NumeroDDT_Comune",
+        "TipoMatch", "StatoAbbinamento",
+    ]
+    print(mostra(df_merge.loc[
+        df_merge["NumeroFattura"].isin(["00013", "00014"]), colonne
+    ]))
+
+    riga = df_merge.loc[df_merge["NumeroFattura"] == "00013"]
+    controlla(
+        "XML senza DDT: chiave derivata dal DDT unico del carico",
+        len(riga) == 1
+        and riga["OrigineChiaveDDT"].iloc[0] == "DDT_UNICO_CARICO",
+        str(riga[["OrigineChiaveDDT", "ChiaveDDT_ComuneXML"]].to_dict("records")),
+    )
+    controlla(
+        "XML senza DDT: la riga risulta abbinata",
+        len(riga) == 1 and riga["StatoAbbinamento"].iloc[0] == "Abbinato",
+        str(riga[["StatoAbbinamento", "TipoMatch"]].to_dict("records")),
+    )
+    controlla(
+        "XML senza DDT: il documento risulta trovato",
+        len(riga) == 1 and riga["StatoDocumento"].iloc[0] == "Documento trovato",
+        str(riga["StatoDocumento"].tolist()),
+    )
+    controlla(
+        "XML senza DDT: la bolla del carico compare nel report",
+        len(riga) == 1 and riga["NumeroDDT_Comune"].iloc[0] == "G/013",
+        str(riga["NumeroDDT_Comune"].tolist()),
+    )
+
+    riga = df_merge.loc[
+        (df_merge["NumeroFattura"] == "00014")
+        & df_merge["ID_Riga_XML"].notna()
+    ]
+    controlla(
+        "due DDT sul carico: chiave non derivata",
+        len(riga) == 1 and pd.isna(riga["ChiaveDDT_ComuneXML"].iloc[0]),
+        str(riga["ChiaveDDT_ComuneXML"].tolist()),
+    )
+    controlla(
+        "due DDT sul carico: stato dedicato DDT_AMBIGUO",
+        len(riga) == 1 and riga["OrigineChiaveDDT"].iloc[0] == "DDT_AMBIGUO",
+        str(riga["OrigineChiaveDDT"].tolist()),
+    )
+    controlla(
+        "due DDT sul carico: stato documento 'DDT ambiguo'",
+        len(riga) == 1 and riga["StatoDocumento"].iloc[0] == "DDT ambiguo",
+        str(riga["StatoDocumento"].tolist()),
+    )
+    controlla(
+        "due DDT sul carico: nessun abbinamento",
+        len(riga) == 1 and riga["StatoAbbinamento"].iloc[0] == "Solo XML",
+        str(riga["StatoAbbinamento"].tolist()),
+    )
+    controlla(
+        "nessuna riga XML resta priva di chiave senza motivo",
+        set(
+            df_merge.loc[
+                df_merge["ID_Riga_XML"].notna()
+                & df_merge["ChiaveDDT_ComuneXML"].isna(),
+                "OrigineChiaveDDT",
+            ]
+        ) <= {"NESSUNA_CHIAVE", "DDT_AMBIGUO", "ORFANO"},
+        str(df_merge.loc[
+            df_merge["ID_Riga_XML"].notna()
+            & df_merge["ChiaveDDT_ComuneXML"].isna(),
+            ["NumeroFattura", "OrigineChiaveDDT"],
+        ].to_dict("records")),
+    )
+
+
 def verifica_codici(df_xml_righe):
-    titolo(5, "CODICI ARTICOLO E NORMALIZZAZIONE (celle [12]-[13])")
+    titolo(6, "CODICI ARTICOLO E NORMALIZZAZIONE (celle [12]-[13])")
 
     print(mostra(df_xml_righe[[
         "CFOR", "NumeroFattura", "ChiaveArticoloXML", "EAN",
@@ -295,7 +374,7 @@ def verifica_codici(df_xml_righe):
 
 
 def verifica_normalizzazione_carichi(df_fatture, df_merge, namespace):
-    titolo(6, "NORMALIZZAZIONE DEI CODICI SUL LATO CARICHI (cella [10])")
+    titolo(7, "NORMALIZZAZIONE DEI CODICI SUL LATO CARICHI (cella [10])")
 
     colonne = [
         "mersy_fornitore(CFOR)",
@@ -361,7 +440,7 @@ def verifica_normalizzazione_carichi(df_fatture, df_merge, namespace):
 
 
 def verifica_dizionario(dizionari):
-    titolo(7, "DIAGNOSTICA DEL DIZIONARIO (cella [5])")
+    titolo(8, "DIAGNOSTICA DEL DIZIONARIO (cella [5])")
 
     print("Anomalie:")
     print(dizionari["Anomalie"].to_string(index=False))
@@ -383,11 +462,11 @@ def verifica_dizionario(dizionari):
 
 
 def verifica_perimetro(df_fatture):
-    titolo(8, "PERIMETRO E ANAGRAFICHE (celle [8]-[9])")
+    titolo(9, "PERIMETRO E ANAGRAFICHE (celle [8]-[9])")
 
     controlla(
         "filtro CDOCIAA = 60I applicato",
-        len(df_fatture) == 7,
+        len(df_fatture) == 10,
         f"righe nel perimetro: {len(df_fatture)}",
     )
     controlla(
@@ -412,7 +491,7 @@ def verifica_perimetro(df_fatture):
 
 
 def verifica_export(cartella_output, df_powerbi, namespace):
-    titolo(9, "EXPORT E TIPI DELLE CELLE (celle [16])")
+    titolo(10, "EXPORT E TIPI DELLE CELLE (celle [16])")
 
     for nome in ("riconciliazione.xlsx", "riconciliazione_powerbi.xlsx"):
         controlla(
@@ -540,7 +619,7 @@ def verifica_export(cartella_output, df_powerbi, namespace):
 
 
 def stampa_riepilogo():
-    titolo(10, "RIEPILOGO")
+    titolo(11, "RIEPILOGO")
 
     for nome, esito, dettaglio in ESITI:
         riga = ("PASS  " if esito else "FAIL  ") + nome
@@ -567,6 +646,7 @@ def main():
     )
     verifica_map_ddt(namespace["map_ddt"])
     verifica_merge(namespace["df_merge"])
+    verifica_ddt_derivato(namespace["df_merge"])
     verifica_codici(namespace["df_xml_righe"])
     verifica_normalizzazione_carichi(
         namespace["df_fatture"],

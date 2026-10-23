@@ -83,12 +83,12 @@ Le 16 sezioni sono marcate da commenti `# %% [n]`.
 | 7 | Carichi: lettura e tipi | `df_fatture` tipizzato e filtrato |
 | 8 | Carichi: perimetro | `df_fatture` ristretto alle fatture con XML, colonna `Indice` |
 | 9 | Anagrafiche | punti di consegna, EAN, CARF in `df_fatture` |
-| 10 | Chiave DDT lato carichi | `NDOGIAB_Chiave` |
+| 10 | Chiave DDT e codici lato carichi | `NDOGIAB_Chiave`, `CEAN_Chiave`, `CART_Chiave`, `CALA_Chiave` |
 | 11 | CFOR e chiave DDT lato XML | `CFOR_XML`, `NumeroDDT_Chiave` |
 | 12 | Codici articolo normalizzati | `CampoCanonico` + `CodiceValoreNormalizzato` |
 | 13 | Righe aggregate | `df_xml_righe` (1 riga per articolo dentro un DDT) |
 | 14 | Abbinamento DDT | `map_ddt` |
-| 15 | Merge finale | `df_merge` (full outer) |
+| 15 | Merge finale | `df_merge` (full outer), chiave DDT derivata se l'XML non ha bolla |
 | 16 | Esportazione | `export/riconciliazione.xlsx`, 6 fogli |
 
 La seconda cella del notebook è un blocco aggiuntivo `[16]` che costruisce il dataset ridotto per
@@ -172,6 +172,27 @@ collegata a un solo DDT, oppure a più DDT che riportano la stessa data. Con dat
 vuota (e viene conteggiata nel riepilogo della sezione `[3]`), così nessun abbinamento si appoggia
 su una data scelta a caso.
 
+#### XML senza bolla, carico con una sola bolla
+
+Capita che la fattura elettronica non riporti alcun `DatiDDT` mentre il carico la bolla ce l'ha.
+Senza chiave, la riga XML resterebbe `Solo XML` pur avendo il documento in azienda.
+
+La regola (sezione `[15]`, blocco *2-bis*) è stretta:
+
+| DDT sul carico per `CFOR + fattura` | Comportamento | `OrigineChiaveDDT` |
+|---|---|---|
+| esattamente **uno** | la chiave viene presa da quel DDT e la riga si abbina | `DDT_UNICO_CARICO` |
+| **più di uno** | nessuna derivazione, la riga resta non abbinata | `DDT_AMBIGUO` |
+| nessuno | nessuna derivazione | `NESSUNA_CHIAVE` |
+
+La chiave derivata è letta direttamente da `ChiaveDDT_ComuneCarico` (non ricostruita), così
+coincide per costruzione con quella su cui lavorano le lookup. Il caso ambiguo ha uno stato
+dedicato in `StatoDocumento` (`DDT ambiguo`): meglio non abbinare che abbinare alla bolla
+sbagliata.
+
+`OrigineChiaveDDT` distingue quindi `MAPPATO` (DDT presente nell'XML), `ORFANO` (DDT XML non
+presente nei carichi), `DDT_UNICO_CARICO` e `DDT_AMBIGUO`, oltre a `NESSUNA_CHIAVE`.
+
 ### 5.2 Articolo (sezioni 10 e 15)
 
 Il confronto avviene **su valori normalizzati da entrambi i lati**: l'XML passa dal dizionario
@@ -199,14 +220,15 @@ nulla restano `Solo XML`, le righe carico non raggiunte restano `Solo carico`.
 |---|---|
 | `StatoAbbinamento` | `Abbinato`, `Solo XML`, `Solo carico`, `Da verificare` |
 | `TipoMatch` | `EAN`, `CART`, `CALA`, `Nessun match`, `Solo carico` |
-| `StatoDocumento` | `Documento trovato`, `DDT non corrispondente`, `CFOR non corrispondente`, `Fattura non trovata`, `DDT XML nullo`, `Solo carico` |
+| `StatoDocumento` | `Documento trovato`, `DDT non corrispondente`, `CFOR non corrispondente`, `Fattura non trovata`, `DDT ambiguo`, `DDT XML nullo`, `Solo carico` |
 | `MetodoMatchDDT` | `TESTO`, `DATA_UNIVOCA`, `UNICO_RESIDUO`, `UNICO_RESIDUO_DATA_MANCANTE` |
 | `TipoAbbinamentoDDT` | `ESPLICITO`, `IMPLICITO`, `NON_ABBINATO`, `NESSUN_DDT` |
 
 La lettura tipica: `Solo XML` + `Documento trovato` = la fattura c'è, manca la riga a carico;
 `DDT non corrispondente` = il carico esiste ma il DDT è scritto diversamente (candidato a una
 nuova regola nel dizionario); `CFOR non corrispondente` = il numero fattura esiste ma sotto un
-altro fornitore.
+altro fornitore; `DDT ambiguo` = l'XML non indica la bolla e il carico ne ha più di una, quindi la
+riga va guardata a mano.
 
 ---
 

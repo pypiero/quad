@@ -551,6 +551,20 @@ I DDT non abbinati non ricevono una chiave comune: più avanti ciascun lato cost
 "orfano" (`XML_ORFANO` / `CARICO_ORFANO`) che **per costruzione** non può incontrare nulla
 sull'altro lato.
 
+**XML senza bolla.** L'XML può non riportare alcun `DatiDDT`, mentre il carico la bolla ce l'ha
+sempre. Per non perdere quelle righe, dopo aver costruito le chiavi del lato carichi si guarda
+quanti DDT distinti ha la coppia `CFOR + fattura`:
+
+| DDT distinti sul carico | Esito | `OrigineChiaveDDT` |
+|---|---|---|
+| 1 | la chiave del carico viene copiata sulla riga XML | `DDT_UNICO_CARICO` |
+| > 1 | nulla: il caso è ambiguo | `DDT_AMBIGUO` |
+| — (XML con DDT proprio) | percorso normale | `MAPPATO` / `ORFANO` |
+
+La chiave si legge da `ChiaveDDT_ComuneCarico`, non si ricostruisce: così è identica a quella su cui
+lavorano le lookup, orfano compreso. Un DDT derivato in questo modo non è un abbinamento certo, e
+`OrigineChiaveDDT` lo rende visibile in output.
+
 ### [15] Merge finale
 
 Cinque passaggi.
@@ -593,7 +607,8 @@ altro                              → "Da verificare"
 ```
 
 Infine: aggancio dell'anagrafica per `CARF` (per segnalare i codici fornitore usati su più articoli)
-e la colonna di lettura `NumeroDDT_Comune` (DDT XML → DDT abbinato → `NDOGIAB` → `"Senza DDT"`).
+e la colonna di lettura `NumeroDDT_Comune` (DDT XML → DDT abbinato → DDT derivato → `NDOGIAB` →
+`"Senza DDT"`).
 
 ### [16] Export diagnostico
 
@@ -695,7 +710,8 @@ Ogni riga di `df_merge` ha quattro indicatori. La combinazione racconta la stori
 | `DDT non corrispondente` | il documento c'è, il DDT no | numero DDT scritto diversamente → nuova regola nel dizionario |
 | `CFOR non corrispondente` | la fattura c'è, ma sotto un altro fornitore | errore di `CEAS`/fornitore nei dati |
 | `Fattura non trovata` | nessun carico con quella fattura | fattura fuori perimetro o non ancora caricata |
-| `DDT XML nullo` | la linea XML non ha un DDT | riga descrittiva o XML incompleto |
+| `DDT ambiguo` | l'XML non ha DDT e il carico ne ha più di uno | non si deriva la chiave: la riga va guardata a mano |
+| `DDT XML nullo` | la linea XML non ha un DDT e il carico nemmeno | riga descrittiva o XML incompleto |
 | `Solo carico` | riga solo carico | — |
 
 **Combinazione tipica da cercare**: `Solo XML` + `Documento trovato` significa "il trasporto è
