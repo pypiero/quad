@@ -432,6 +432,22 @@ normalizzazione) e **segnala i `CampoCanonico` non riconosciuti**: un refuso com
 invece di `CODICE_FORNITORE` renderebbe la regola invisibile, e senza questo controllo passerebbe
 inosservato.
 
+**Coerenza fra i due lati.** I due lati leggono il dizionario in modo asimmetrico: l'XML per
+`(CFOR, CodiceTipoXML)`, i carichi per `(CFOR, CampoCanonico)`. Poiché quando la regola manca si
+applica `REGOLA_DEFAULT` (`DDT_BASE`), una riga assente **non** equivale a `NESSUNA_REGOLA`:
+
+```
+XML       NESSUNA_REGOLA  →  ART/002     (separatori mantenuti)
+carichi   riga assente    →  ART002      (DDT_BASE: separatori rimossi)
+```
+
+Stesso codice, due chiavi, nessun match e nessun errore. La sezione confronta quindi le regole
+**effettive** dei due lati e produce `regole_non_allineate` (`CFOR`, `Campo`, `RegolaXML`,
+`RegolaCarico`). Il confronto è sull'effetto, non sul testo: una regola non riconosciuta ricade sul
+default esattamente come una regola assente, e non viene segnalata (l'anomalia è già nella
+diagnostica della sezione `[6]`). Anche i DDT vengono controllati, confrontando `RegolaDDTXML` e
+`RegolaDDTCarico` della stessa riga. È un controllo di sola lettura: non cambia il risultato.
+
 **Nota storica**: fino a questa versione il lato carichi non veniva normalizzato affatto — la
 funzione `normalizza_codice_carico` esisteva ma non era mai chiamata, e il confronto avveniva sui
 valori grezzi.

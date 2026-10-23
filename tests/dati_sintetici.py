@@ -314,6 +314,12 @@ DIZIONARIO = {
         {"CFOR": "F003", "Denominazione": "tre", "CodiceTipoXML": "FORN",
          "CampoCanonico": "CODICE_FORNITORE",
          "RegolaNormalizzazione": "DDT_BASE"},
+        # F009: regola presente solo sul lato XML. Il lato carichi non
+        # ha la riga e ricade sul default, quindi le due chiavi non
+        # coincidono: la diagnostica deve segnalarlo.
+        {"CFOR": "F009", "Denominazione": "nove", "CodiceTipoXML": "FORN",
+         "CampoCanonico": "CODICE_FORNITORE",
+         "RegolaNormalizzazione": "NESSUNA_REGOLA"},
     ]),
     "RegoleCodiciCarico": pd.DataFrame([
         {"CFOR": "F001", "Denominazione": "uno", "CampoCanonico": "EAN",

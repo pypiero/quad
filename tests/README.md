@@ -67,7 +67,7 @@ il test si adegua da solo.
 5. **Merge finale** — cascata EAN → CART → CALA, righe `Solo XML` / `Solo carico`, assenza di duplicati;
 6. **Codici articolo** — normalizzazione per fornitore, righe senza codice, nature (`SC`, …);
 7. **Normalizzazione sul lato carichi** — `CEAN` / `CART` / `CALA` da `RegoleCodiciCarico`, refuso nel
-   `CampoCanonico` segnalato senza bloccare;
+   `CampoCanonico` segnalato senza bloccare, regole disallineate fra i due fogli segnalate;
 8. **Dizionario** — regola non riconosciuta e chiave duplicata segnalate senza bloccare;
 9. **Perimetro e anagrafiche** — filtro `CDOCIAA`, precedenza `TDEC` su `CARF`, punti di consegna;
 10. **Export** — file creati e tipo delle celle nell'xlsx (date, numeri, testo).

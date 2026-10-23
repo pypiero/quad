@@ -148,6 +148,24 @@ Una regola scritta male o una cella vuota **non bloccano** l'esecuzione: si appl
 l'anomalia viene elencata nella diagnostica della sezione `[6]` (regole non riconosciute, chiavi
 duplicate). In caso di chiave duplicata vince la prima riga letta.
 
+### Attenzione al default
+
+Le regole sono **per lato**. Una riga assente non equivale a `NESSUNA_REGOLA`: in entrambi i casi
+il valore viene ripulito (trim, maiuscolo), ma con `NESSUNA_REGOLA` restano i separatori, mentre
+senza riga si applica `DDT_BASE` che li toglie.
+
+```
+XML   CODICE_FORNITORE  NESSUNA_REGOLA  →  ART/002
+carichi  (riga assente)  DDT_BASE       →  ART002      ← nessun match
+```
+
+Se il codice articolo è scritto **identico** sui due lati ma il dizionario non ha una riga per quel
+`CampoCanonico` in `RegoleCodiciCarico`, la riga resta `Solo XML` senza alcun errore. La sezione
+`[10]` confronta le regole effettive dei due lati e, se differiscono, stampa
+`ATTENZIONE - regole diverse fra i due lati` con la tabella `regole_non_allineate`
+(`CFOR`, `Campo`, `RegolaXML`, `RegolaCarico`). Una regola non riconosciuta e una regola assente
+producono lo stesso effetto e quindi non vengono segnalate come disallineamento.
+
 ---
 
 ## 5. Come avviene l'abbinamento
