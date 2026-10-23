@@ -97,6 +97,11 @@ Il confronto procede a cascata: si usa il primo livello che trova qualcosa.
 | 2 | `CODICE_CLIENTE` | `CART` | codice interno, stabile |
 | 3 | `CODICE_FORNITORE` | `CALA` (da `CARF`) | ripiego, dipende dalla mappatura |
 
+Entrambi i lati arrivano al confronto **normalizzati**: l'XML con la regola del foglio
+`RegoleCodiciXML`, i carichi con quella del foglio `RegoleCodiciCarico`. Sul lato carichi le chiavi
+si chiamano `CEAN_Chiave`, `CART_Chiave`, `CALA_Chiave`; i valori originali restano nelle colonne di
+partenza, perché è da lì che il report prende i codici da mostrare.
+
 ---
 
 ## 3. Mappa del flusso
@@ -160,7 +165,7 @@ Il confronto procede a cascata: si usa il primo livello che trova qualcosa.
 | `df_fatture` | riga di carico | [7]-[10] |
 | `map_ddt` | coppia DDT XML ↔ DDT carico | [14] |
 | `df_merge` | riga riconciliata (XML, carico o entrambe) | [15] |
-| `df_powerbi` | come `df_merge`, 21 colonne | blocco finale |
+| `df_powerbi` | come `df_merge`, 24 colonne | blocco finale |
 
 **Questo è il punto più importante da capire**: i due lati arrivano al merge con granularità
 diverse. L'XML parte da *linee* e arriva ad *articoli*; i carichi partono già da *articoli*. Se le
@@ -410,11 +415,26 @@ Infine **`CALA` viene sostituita da `CARF`**: da quel momento la colonna `mersy_
 contiene il codice dell'anagrafica. La sostituzione **non normalizza**: la normalizzazione è
 competenza del dizionario.
 
-### [10] Chiave DDT lato carichi
+### [10] Chiavi di confronto dei carichi (DDT e codici articolo)
 
-Si prendono le coppie distinte `(CFOR, NDOGIAB)`, si normalizzano **una volta sola** (la
-normalizzazione è costosa) e si riportano nel DataFrame come `NDOGIAB_Chiave`. Il valore originale
-resta.
+Si prendono le coppie distinte, si normalizzano **una volta sola** (la normalizzazione è costosa) e
+si riportano nel DataFrame. I valori originali restano.
+
+| Colonna origine | Chiave | Foglio del dizionario |
+|---|---|---|
+| `NDOGIAB` | `NDOGIAB_Chiave` | `RegoleDDT` (colonna `RegolaDDTCarico`) |
+| `CEAN` | `CEAN_Chiave` | `RegoleCodiciCarico` (`EAN`) |
+| `CART` | `CART_Chiave` | `RegoleCodiciCarico` (`CODICE_CLIENTE`) |
+| `CALA` (da `CARF`) | `CALA_Chiave` | `RegoleCodiciCarico` (`CODICE_FORNITORE`) |
+
+La sezione stampa un riepilogo per campo (valori distinti, chiavi distinte, valori modificati dalla
+normalizzazione) e **segnala i `CampoCanonico` non riconosciuti**: un refuso come `CODICE_FORNTORE`
+invece di `CODICE_FORNITORE` renderebbe la regola invisibile, e senza questo controllo passerebbe
+inosservato.
+
+**Nota storica**: fino a questa versione il lato carichi non veniva normalizzato affatto — la
+funzione `normalizza_codice_carico` esisteva ma non era mai chiamata, e il confronto avveniva sui
+valori grezzi.
 
 Il merge usa `validate="many_to_one"` e un assert sul numero di righe: se la deduplica fosse sbagliata,
 il numero cambierebbe e ce ne accorgeremmo subito.
@@ -531,6 +551,20 @@ I DDT non abbinati non ricevono una chiave comune: più avanti ciascun lato cost
 "orfano" (`XML_ORFANO` / `CARICO_ORFANO`) che **per costruzione** non può incontrare nulla
 sull'altro lato.
 
+**XML senza bolla.** L'XML può non riportare alcun `DatiDDT`, mentre il carico la bolla ce l'ha
+sempre. Per non perdere quelle righe, dopo aver costruito le chiavi del lato carichi si guarda
+quanti DDT distinti ha la coppia `CFOR + fattura`:
+
+| DDT distinti sul carico | Esito | `OrigineChiaveDDT` |
+|---|---|---|
+| 1 | la chiave del carico viene copiata sulla riga XML | `DDT_UNICO_CARICO` |
+| > 1 | nulla: il caso è ambiguo | `DDT_AMBIGUO` |
+| — (XML con DDT proprio) | percorso normale | `MAPPATO` / `ORFANO` |
+
+La chiave si legge da `ChiaveDDT_ComuneCarico`, non si ricostruisce: così è identica a quella su cui
+lavorano le lookup, orfano compreso. Un DDT derivato in questo modo non è un abbinamento certo, e
+`OrigineChiaveDDT` lo rende visibile in output.
+
 ### [15] Merge finale
 
 Cinque passaggi.
@@ -573,7 +607,8 @@ altro                              → "Da verificare"
 ```
 
 Infine: aggancio dell'anagrafica per `CARF` (per segnalare i codici fornitore usati su più articoli)
-e la colonna di lettura `NumeroDDT_Comune` (DDT XML → DDT abbinato → `NDOGIAB` → `"Senza DDT"`).
+e la colonna di lettura `NumeroDDT_Comune` (DDT XML → DDT abbinato → DDT derivato → `NDOGIAB` →
+`"Senza DDT"`).
 
 ### [16] Export diagnostico
 
@@ -586,7 +621,7 @@ permette di risalire a ogni passaggio.
 ## 6. Il blocco finale: il report
 
 La seconda cella del notebook costruisce `df_powerbi` e lo salva in
-`export/riconciliazione_powerbi.xlsx` (un foglio, 21 colonne).
+`export/riconciliazione_powerbi.xlsx` (un foglio, 24 colonne).
 
 ### 6.1 `coalesce_colonne`
 
@@ -601,10 +636,13 @@ opzionali, che potrebbero non esistere.
 |---|---|---|---|
 | `Fattura` | `NumeroFattura` (XML) | `mersy_n_fattura(NDOGIAA)` | `Senza fattura` |
 | `Data fattura` | `DataFattura` | `mersy_data_fattura(TDATIAA)` | — |
+| `CEAS` | solo `mersy_archiviazione_ottica(CEAS)` | — | — |
+| `CFOR` | `Fornitore_consolidato` | — | — |
+| `Denominazione` | etichetta `(CFOR) Nome` | — | — |
 | `Bolla` | `NumeroDDT_Comune` | — | `Senza DDT` |
 | `Data bolla` | `DataDDT` | `DataDDT_XML`, `mersy_data_DDT(TDATIAB)` | — |
 | `Descrizione` | `Descrizione` | `mersy_descrizione_articolo(XART)` | `Descrizione non disponibile` |
-| `Numero riga fattura` | `NumeriLineaXML` | `StatoAbbinamento` | — |
+| `Numero riga fattura` | `NumeriLineaXML` | — | — (vuoto senza lato XML) |
 | `Unità di misura` | `UnitaMisura` | `mersy_um_prezzo(CUMF)` | — |
 | `Codice articolo interno` | `Codice Art. Cliente` | `mersy_articolo(CART)` | — |
 | `Codice articolo fornitore` | `Codice Art. Fornitore` | `mersy_articolo_fornitore(CALA)` | — |
@@ -617,9 +655,13 @@ opzionali, che potrebbero non esistere.
 | `Totale XML` | `PrezzoTotale` | — | — |
 | `Totale Mersy` | `mersy_importo_ns_accettazione(Importo_ns_fattura)` | — | — |
 | `Differenza totali` | `Totale XML − Totale Mersy` | — | — |
-| `CFOR` | `Fornitore_consolidato` (CFOR XML, altrimenti Mersy) | — | — |
-| `Denominazione` | etichetta `Nome (CFOR)` | — | — |
+| `CPCO` | `mersy_punto_consegna(CPCO)` | — | — (vuoto senza carico) |
+| `CPCO descrizione` | `mersy_descrizione_punto_consegna(XPCO)` | — | — |
 | `Stato abbinamento` | `StatoAbbinamento` | — | — |
+
+`CEAS`, `CPCO` e la sua descrizione arrivano **solo dal lato carichi**: sulle righe `Solo XML`
+restano vuote. È corretto: una bolla non ancora consegnata non ha punto di consegna, e nell'XML il
+`CEAS` non è un dato del documento ma il nome del file.
 
 Le differenze si calcolano **dopo** il coalesce: se manca un lato, la differenza è vuota (non zero).
 Questo è voluto: "non ho il dato" e "differenza zero" sono due cose diverse.
@@ -629,7 +671,7 @@ Questo è voluto: "non ho il dato" e "differenza zero" sono due cose diverse.
 1. `Fornitore_consolidato` = CFOR dell'XML, altrimenti quello dei carichi;
 2. mappa `CFOR → Denominazione` costruita dalle righe che hanno entrambi;
 3. ogni riga riceve il nome cercando il proprio CFOR nella mappa;
-4. `crea_etichetta_fornitore` compone `Nome (CFOR)`, oppure `Nome`, oppure `CFOR`, oppure
+4. `crea_etichetta_fornitore` compone `(CFOR) Nome`, oppure `(CFOR)`, oppure `Nome`, oppure
    `Fornitore non disponibile`.
 
 **Limite noto**: una fattura fuori perimetro non ha CFOR, quindi non trova il nome nella mappa ed
@@ -668,7 +710,8 @@ Ogni riga di `df_merge` ha quattro indicatori. La combinazione racconta la stori
 | `DDT non corrispondente` | il documento c'è, il DDT no | numero DDT scritto diversamente → nuova regola nel dizionario |
 | `CFOR non corrispondente` | la fattura c'è, ma sotto un altro fornitore | errore di `CEAS`/fornitore nei dati |
 | `Fattura non trovata` | nessun carico con quella fattura | fattura fuori perimetro o non ancora caricata |
-| `DDT XML nullo` | la linea XML non ha un DDT | riga descrittiva o XML incompleto |
+| `DDT ambiguo` | l'XML non ha DDT e il carico ne ha più di uno | non si deriva la chiave: la riga va guardata a mano |
+| `DDT XML nullo` | la linea XML non ha un DDT e il carico nemmeno | riga descrittiva o XML incompleto |
 | `Solo carico` | riga solo carico | — |
 
 **Combinazione tipica da cercare**: `Solo XML` + `Documento trovato` significa "il trasporto è
@@ -812,14 +855,15 @@ Contiene tutto `df_xml_righe` (23 colonne), tutte le colonne dei carichi (26), i
 `NumeroRigheFattura`, `NumeroRigheFatturaGlobale`, `DDTCarico*`), gli stati (`TipoMatch`,
 `StatoDocumento`, `StatoAbbinamento`) e `NumeroDDT_Comune`.
 
-### `df_powerbi` (21 colonne, il report)
+### `df_powerbi` (24 colonne, il report)
 
 ```
-Fattura, Data fattura, Bolla, Data bolla, Descrizione, Numero riga fattura,
-Unità di misura, Codice articolo interno, Codice articolo fornitore, Codice EAN,
+Fattura, Data fattura, CEAS, CFOR, Denominazione, Bolla, Data bolla,
+CPCO, CPCO descrizione, Descrizione, Numero riga fattura, Unità di misura,
+Codice articolo interno, Codice articolo fornitore, Codice EAN,
 Quantità XML, Quantità carico, Differenza quantità, Prezzo unitario XML,
 Prezzo unitario carico, Totale XML, Totale Mersy, Differenza totali,
-CFOR, Denominazione, Stato abbinamento
+Stato abbinamento
 ```
 
 ### Funzioni, sezione per sezione

@@ -62,11 +62,15 @@ il test si adegua da solo.
 1. **Date DDT** — estrazione di `DataDDT`, casi con data assente e con linea non citata dal DDT;
 2. **Denominazione** — estrazione del fornitore e propagazione fino al report;
 3. **Abbinamento DDT** — i tre livelli `TESTO`, `DATA_UNIVOCA`, `UNICO_RESIDUO_DATA_MANCANTE`;
-4. **Merge finale** — cascata EAN → CART → CALA, righe `Solo XML` / `Solo carico`, assenza di duplicati;
-5. **Codici articolo** — normalizzazione per fornitore, righe senza codice, nature (`SC`, …);
-6. **Dizionario** — regola non riconosciuta e chiave duplicata segnalate senza bloccare;
-7. **Perimetro e anagrafiche** — filtro `CDOCIAA`, precedenza `TDEC` su `CARF`, punti di consegna;
-8. **Export** — file creati e tipo delle celle nell'xlsx (date, numeri, testo).
+4. **DDT derivato** — XML senza bolla agganciato al DDT unico del carico, e caso con più DDT
+   lasciato non abbinato con lo stato dedicato `DDT_AMBIGUO`;
+5. **Merge finale** — cascata EAN → CART → CALA, righe `Solo XML` / `Solo carico`, assenza di duplicati;
+6. **Codici articolo** — normalizzazione per fornitore, righe senza codice, nature (`SC`, …);
+7. **Normalizzazione sul lato carichi** — `CEAN` / `CART` / `CALA` da `RegoleCodiciCarico`, refuso nel
+   `CampoCanonico` segnalato senza bloccare;
+8. **Dizionario** — regola non riconosciuta e chiave duplicata segnalate senza bloccare;
+9. **Perimetro e anagrafiche** — filtro `CDOCIAA`, precedenza `TDEC` su `CARF`, punti di consegna;
+10. **Export** — file creati e tipo delle celle nell'xlsx (date, numeri, testo).
 
 ## Provare il test contro un'altra versione del notebook
 

@@ -83,17 +83,17 @@ Le 16 sezioni sono marcate da commenti `# %% [n]`.
 | 7 | Carichi: lettura e tipi | `df_fatture` tipizzato e filtrato |
 | 8 | Carichi: perimetro | `df_fatture` ristretto alle fatture con XML, colonna `Indice` |
 | 9 | Anagrafiche | punti di consegna, EAN, CARF in `df_fatture` |
-| 10 | Chiave DDT lato carichi | `NDOGIAB_Chiave` |
+| 10 | Chiave DDT e codici lato carichi | `NDOGIAB_Chiave`, `CEAN_Chiave`, `CART_Chiave`, `CALA_Chiave` |
 | 11 | CFOR e chiave DDT lato XML | `CFOR_XML`, `NumeroDDT_Chiave` |
 | 12 | Codici articolo normalizzati | `CampoCanonico` + `CodiceValoreNormalizzato` |
 | 13 | Righe aggregate | `df_xml_righe` (1 riga per articolo dentro un DDT) |
 | 14 | Abbinamento DDT | `map_ddt` |
-| 15 | Merge finale | `df_merge` (full outer) |
+| 15 | Merge finale | `df_merge` (full outer), chiave DDT derivata se l'XML non ha bolla |
 | 16 | Esportazione | `export/riconciliazione.xlsx`, 6 fogli |
 
 La seconda cella del notebook è un blocco aggiuntivo `[16]` che costruisce il dataset ridotto per
 il report e lo salva in `export/riconciliazione_powerbi.xlsx` (un solo foglio `df_merge`,
-21 colonne). È l'output pensato per il consumo da parte del report.
+24 colonne). È l'output pensato per il consumo da parte del report.
 
 ### Dettagli sulle sorgenti XML
 
@@ -122,6 +122,11 @@ lato carico sono configurati separatamente perché hanno granularità diverse.
 |---|---|---|
 | `RegoleCodiciXML` | `CFOR` + `CodiceTipoXML` | → `CampoCanonico`, `RegolaNormalizzazione` |
 | `RegoleCodiciCarico` | `CFOR` + `CampoCanonico` | → `RegolaNormalizzazione` |
+
+Nel foglio `RegoleCodiciCarico` la colonna `CampoCanonico` deve contenere **esattamente** `EAN`,
+`CODICE_CLIENTE` o `CODICE_FORNITORE` (gli stessi nomi usati in `RegoleCodiciXML`); un valore
+diverso — per esempio `CODICE_FORNTORE` — non viene applicato e il notebook lo segnala a runtime
+nella sezione `[10]`.
 | `RegoleDDT` | `CFOR` | → `RegolaDDTXML`, `RegolaDDTCarico` |
 
 Regole disponibili (le stesse per DDT e codici articolo):
@@ -167,7 +172,33 @@ collegata a un solo DDT, oppure a più DDT che riportano la stessa data. Con dat
 vuota (e viene conteggiata nel riepilogo della sezione `[3]`), così nessun abbinamento si appoggia
 su una data scelta a caso.
 
-### 5.2 Articolo (sezione 15)
+#### XML senza bolla, carico con una sola bolla
+
+Capita che la fattura elettronica non riporti alcun `DatiDDT` mentre il carico la bolla ce l'ha.
+Senza chiave, la riga XML resterebbe `Solo XML` pur avendo il documento in azienda.
+
+La regola (sezione `[15]`, blocco *2-bis*) è stretta:
+
+| DDT sul carico per `CFOR + fattura` | Comportamento | `OrigineChiaveDDT` |
+|---|---|---|
+| esattamente **uno** | la chiave viene presa da quel DDT e la riga si abbina | `DDT_UNICO_CARICO` |
+| **più di uno** | nessuna derivazione, la riga resta non abbinata | `DDT_AMBIGUO` |
+| nessuno | nessuna derivazione | `NESSUNA_CHIAVE` |
+
+La chiave derivata è letta direttamente da `ChiaveDDT_ComuneCarico` (non ricostruita), così
+coincide per costruzione con quella su cui lavorano le lookup. Il caso ambiguo ha uno stato
+dedicato in `StatoDocumento` (`DDT ambiguo`): meglio non abbinare che abbinare alla bolla
+sbagliata.
+
+`OrigineChiaveDDT` distingue quindi `MAPPATO` (DDT presente nell'XML), `ORFANO` (DDT XML non
+presente nei carichi), `DDT_UNICO_CARICO` e `DDT_AMBIGUO`, oltre a `NESSUNA_CHIAVE`.
+
+### 5.2 Articolo (sezioni 10 e 15)
+
+Il confronto avviene **su valori normalizzati da entrambi i lati**: l'XML passa dal dizionario
+(`RegoleCodiciXML`), i carichi dal foglio `RegoleCodiciCarico`. Le colonne originali restano intatte
+(il report mostra i codici reali); il confronto usa invece `CEAN_Chiave`, `CART_Chiave`,
+`CALA_Chiave` sul lato carichi e i valori normalizzati sul lato XML.
 
 Per ogni riga XML si cercano le righe carico compatibili con una cascata di tre livelli:
 
@@ -189,14 +220,15 @@ nulla restano `Solo XML`, le righe carico non raggiunte restano `Solo carico`.
 |---|---|
 | `StatoAbbinamento` | `Abbinato`, `Solo XML`, `Solo carico`, `Da verificare` |
 | `TipoMatch` | `EAN`, `CART`, `CALA`, `Nessun match`, `Solo carico` |
-| `StatoDocumento` | `Documento trovato`, `DDT non corrispondente`, `CFOR non corrispondente`, `Fattura non trovata`, `DDT XML nullo`, `Solo carico` |
+| `StatoDocumento` | `Documento trovato`, `DDT non corrispondente`, `CFOR non corrispondente`, `Fattura non trovata`, `DDT ambiguo`, `DDT XML nullo`, `Solo carico` |
 | `MetodoMatchDDT` | `TESTO`, `DATA_UNIVOCA`, `UNICO_RESIDUO`, `UNICO_RESIDUO_DATA_MANCANTE` |
 | `TipoAbbinamentoDDT` | `ESPLICITO`, `IMPLICITO`, `NON_ABBINATO`, `NESSUN_DDT` |
 
 La lettura tipica: `Solo XML` + `Documento trovato` = la fattura c'è, manca la riga a carico;
 `DDT non corrispondente` = il carico esiste ma il DDT è scritto diversamente (candidato a una
 nuova regola nel dizionario); `CFOR non corrispondente` = il numero fattura esiste ma sotto un
-altro fornitore.
+altro fornitore; `DDT ambiguo` = l'XML non indica la bolla e il carico ne ha più di una, quindi la
+riga va guardata a mano.
 
 ---
 
@@ -217,19 +249,26 @@ Sei fogli, uno per tabella:
 
 ### `export/riconciliazione_powerbi.xlsx` — dataset per il report
 
-Un solo foglio `df_merge`, 21 colonne:
+Un solo foglio `df_merge`, 24 colonne:
 
 ```
-Fattura, Data fattura, Bolla, Data bolla, Descrizione, Numero riga fattura,
-Unità di misura, Codice articolo interno, Codice articolo fornitore, Codice EAN,
+Fattura, Data fattura, CEAS, CFOR, Denominazione, Bolla, Data bolla,
+CPCO, CPCO descrizione, Descrizione, Numero riga fattura, Unità di misura,
+Codice articolo interno, Codice articolo fornitore, Codice EAN,
 Quantità XML, Quantità carico, Differenza quantità,
 Prezzo unitario XML, Prezzo unitario carico,
 Totale XML, Totale Mersy, Differenza totali,
-CFOR, Denominazione, Stato abbinamento
+Stato abbinamento
 ```
 
-`CFOR` è il codice fornitore consolidato: quello dell'XML, altrimenti quello dei carichi. Resta
-vuoto solo quando la riga non ha nessuno dei due.
+Note sulle colonne di anagrafica:
+
+- `CFOR` è il codice fornitore consolidato: quello dell'XML, altrimenti quello dei carichi.
+- `Denominazione` è l'etichetta `(CFOR) Ragione Sociale`, per esempio `(12345) Granarolo`.
+- `CEAS`, `CPCO` e `CPCO descrizione` arrivano **solo dal lato carichi**: sulle righe `Solo XML`
+  restano vuote. È voluto — una bolla non ancora consegnata non ha punto di consegna, e nell'XML il
+  `CEAS` non è un dato del documento (coincide con il nome del file).
+- `Numero riga fattura` contiene il numero di linea XML e resta vuoto sulle righe senza lato XML.
 
 Ogni colonna è un valore "consolidato" con una priorità dichiarata: prima il dato XML, poi
 quello del gestionale (es. `Fattura` = numero XML, altrimenti `NDOGIAA`; `Data bolla` = `DataDDT`,
@@ -247,7 +286,8 @@ pandas al momento della scrittura (`openpyxl`). In pratica:
 |---|---|
 | `Data fattura`, `Data bolla` | data reale (`datetime`), formato `DD/MM/YYYY` |
 | `Quantità *`, `Prezzo *`, `Totale *`, `Differenza *` | numero |
-| `Fattura`, `Bolla`, `Codice articolo *`, `Codice EAN`, `Descrizione`, `Unità di misura`, `Numero riga fattura`, `CFOR`, `Denominazione`, `Stato abbinamento` | testo |
+| `Fattura`, `CEAS`, `CFOR`, `Denominazione`, `Bolla`, `CPCO descrizione`, `Codice articolo *`, `Codice EAN`, `Descrizione`, `Unità di misura`, `Numero riga fattura`, `Stato abbinamento` | testo |
+| `CPCO` | numero intero |
 
 Le celle senza valore restano **vuote** (non `0`, non `NA`). Attenzione a due punti quando il file
 viene riletto da Power Query / Power BI: i codici numerici e gli EAN sono testo e vanno **forzati**
