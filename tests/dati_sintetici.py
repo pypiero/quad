@@ -137,6 +137,15 @@ XML_FILES = {
         linea(1, "PANE INTEGRALE", 2, 2.00, 4.00, "KG",
               codici=[("EAN", "8001111111111")]),
     ),
+    # F003: il codice fornitore e' scritto diversamente sui due lati
+    # (ART002 nell'XML, ART/002 nel carico). Con la regola DDT_BASE
+    # applicata a entrambi i lati i due valori coincidono.
+    "IT05555555555_00012.xml": xml_documento(
+        "00012", "2024-10-01",
+        ddt("F/012", "2024-09-28", [1]),
+        linea(1, "RICOTTA", 2, 4.00, 8.00, "KG",
+              codici=[("FORN", "ART002")]),
+    ),
     # Non FPR12: va scartato in lettura.
     "IT04444444444_00011.xml": xml_documento(
         "11", "2024-05-02", "",
@@ -196,6 +205,13 @@ CARICHI = pd.DataFrame([
             CEAS="IT01111111111_00003",
             **{"Qtà": 2, "Importo_ns_fattura": 4.00, "PF02IAL": 2.00,
                "QTA ORDINE": 2, "QTA ACCETT": 2}),
+    # carico F003: stesso articolo, ma il codice porta un separatore
+    _carico(CFOR="F003", NDOGIAA="00012", TDATIAA="2024-10-01",
+            NDOGIAB="F-012", TDATIAB="2024-09-28", CART="C005",
+            XART="RICOTTA", CALA="ART/002", CUMF="KG",
+            CEAS="IT05555555555_00012",
+            **{"Qtà": 2, "Importo_ns_fattura": 8.00, "PF02IAL": 4.00,
+               "QTA ORDINE": 2, "QTA ACCETT": 2}),
     # fuori perimetro: tipo documento diverso da 60I
     _carico(CFOR="F009", NDOGIAA="999", TDATIAA="2024-01-01",
             NDOGIAB="Q/1", TDATIAB="2024-01-01", CART="C009",
@@ -219,6 +235,7 @@ EAN = pd.DataFrame([
     {"CART": "C002", "SBAR": "EAN", "CEAN": "8002222222222"},
     {"CART": "C003", "SBAR": "EAN", "CEAN": "8003333333333"},
     {"CART": "C004", "SBAR": "EAN", "CEAN": "8004444444444"},
+    {"CART": "C005", "SBAR": "EAN", "CEAN": "8005555555555"},
 ])
 
 CARF = pd.DataFrame([
@@ -233,6 +250,8 @@ CARF = pd.DataFrame([
      "CARF": "ART-003", "XARF": "EXTRA"},
     {"CART": "C004", "CFOR": "F002", "TDEC": "2024-01-01",
      "CARF": "F22-1", "XARF": "YOGURT"},
+    {"CART": "C005", "CFOR": "F003", "TDEC": "2024-01-01",
+     "CARF": "ART/002", "XARF": "RICOTTA"},
 ])
 
 
@@ -257,6 +276,9 @@ DIZIONARIO = {
         {"CFOR": "F002", "Denominazione": "due", "CodiceTipoXML": "X",
          "CampoCanonico": "EAN",
          "RegolaNormalizzazione": "REGOLA_INVENTATA"},
+        {"CFOR": "F003", "Denominazione": "tre", "CodiceTipoXML": "FORN",
+         "CampoCanonico": "CODICE_FORNITORE",
+         "RegolaNormalizzazione": "DDT_BASE"},
     ]),
     "RegoleCodiciCarico": pd.DataFrame([
         {"CFOR": "F001", "Denominazione": "uno", "CampoCanonico": "EAN",
@@ -273,6 +295,14 @@ DIZIONARIO = {
         # duplicato: deve essere segnalato
         {"CFOR": "F001", "Denominazione": "uno", "CampoCanonico": "EAN",
          "RegolaNormalizzazione": "DDT_BASE"},
+        {"CFOR": "F003", "Denominazione": "tre",
+         "CampoCanonico": "CODICE_FORNITORE",
+         "RegolaNormalizzazione": "DDT_BASE"},
+        # refuso voluto: CODICE_FORNTORE invece di CODICE_FORNITORE.
+        # La regola non deve essere applicata, ma il campo va segnalato.
+        {"CFOR": "F003", "Denominazione": "tre",
+         "CampoCanonico": "CODICE_FORNTORE",
+         "RegolaNormalizzazione": "SOLO_NUMERI"},
     ]),
     "RegoleDDT": pd.DataFrame([
         {"CFOR": "F001", "Denominazione": "uno",

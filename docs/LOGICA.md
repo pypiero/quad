@@ -97,6 +97,11 @@ Il confronto procede a cascata: si usa il primo livello che trova qualcosa.
 | 2 | `CODICE_CLIENTE` | `CART` | codice interno, stabile |
 | 3 | `CODICE_FORNITORE` | `CALA` (da `CARF`) | ripiego, dipende dalla mappatura |
 
+Entrambi i lati arrivano al confronto **normalizzati**: l'XML con la regola del foglio
+`RegoleCodiciXML`, i carichi con quella del foglio `RegoleCodiciCarico`. Sul lato carichi le chiavi
+si chiamano `CEAN_Chiave`, `CART_Chiave`, `CALA_Chiave`; i valori originali restano nelle colonne di
+partenza, perché è da lì che il report prende i codici da mostrare.
+
 ---
 
 ## 3. Mappa del flusso
@@ -410,11 +415,26 @@ Infine **`CALA` viene sostituita da `CARF`**: da quel momento la colonna `mersy_
 contiene il codice dell'anagrafica. La sostituzione **non normalizza**: la normalizzazione è
 competenza del dizionario.
 
-### [10] Chiave DDT lato carichi
+### [10] Chiavi di confronto dei carichi (DDT e codici articolo)
 
-Si prendono le coppie distinte `(CFOR, NDOGIAB)`, si normalizzano **una volta sola** (la
-normalizzazione è costosa) e si riportano nel DataFrame come `NDOGIAB_Chiave`. Il valore originale
-resta.
+Si prendono le coppie distinte, si normalizzano **una volta sola** (la normalizzazione è costosa) e
+si riportano nel DataFrame. I valori originali restano.
+
+| Colonna origine | Chiave | Foglio del dizionario |
+|---|---|---|
+| `NDOGIAB` | `NDOGIAB_Chiave` | `RegoleDDT` (colonna `RegolaDDTCarico`) |
+| `CEAN` | `CEAN_Chiave` | `RegoleCodiciCarico` (`EAN`) |
+| `CART` | `CART_Chiave` | `RegoleCodiciCarico` (`CODICE_CLIENTE`) |
+| `CALA` (da `CARF`) | `CALA_Chiave` | `RegoleCodiciCarico` (`CODICE_FORNITORE`) |
+
+La sezione stampa un riepilogo per campo (valori distinti, chiavi distinte, valori modificati dalla
+normalizzazione) e **segnala i `CampoCanonico` non riconosciuti**: un refuso come `CODICE_FORNTORE`
+invece di `CODICE_FORNITORE` renderebbe la regola invisibile, e senza questo controllo passerebbe
+inosservato.
+
+**Nota storica**: fino a questa versione il lato carichi non veniva normalizzato affatto — la
+funzione `normalizza_codice_carico` esisteva ma non era mai chiamata, e il confronto avveniva sui
+valori grezzi.
 
 Il merge usa `validate="many_to_one"` e un assert sul numero di righe: se la deduplica fosse sbagliata,
 il numero cambierebbe e ce ne accorgeremmo subito.

@@ -122,6 +122,11 @@ lato carico sono configurati separatamente perché hanno granularità diverse.
 |---|---|---|
 | `RegoleCodiciXML` | `CFOR` + `CodiceTipoXML` | → `CampoCanonico`, `RegolaNormalizzazione` |
 | `RegoleCodiciCarico` | `CFOR` + `CampoCanonico` | → `RegolaNormalizzazione` |
+
+Nel foglio `RegoleCodiciCarico` la colonna `CampoCanonico` deve contenere **esattamente** `EAN`,
+`CODICE_CLIENTE` o `CODICE_FORNITORE` (gli stessi nomi usati in `RegoleCodiciXML`); un valore
+diverso — per esempio `CODICE_FORNTORE` — non viene applicato e il notebook lo segnala a runtime
+nella sezione `[10]`.
 | `RegoleDDT` | `CFOR` | → `RegolaDDTXML`, `RegolaDDTCarico` |
 
 Regole disponibili (le stesse per DDT e codici articolo):
@@ -167,7 +172,12 @@ collegata a un solo DDT, oppure a più DDT che riportano la stessa data. Con dat
 vuota (e viene conteggiata nel riepilogo della sezione `[3]`), così nessun abbinamento si appoggia
 su una data scelta a caso.
 
-### 5.2 Articolo (sezione 15)
+### 5.2 Articolo (sezioni 10 e 15)
+
+Il confronto avviene **su valori normalizzati da entrambi i lati**: l'XML passa dal dizionario
+(`RegoleCodiciXML`), i carichi dal foglio `RegoleCodiciCarico`. Le colonne originali restano intatte
+(il report mostra i codici reali); il confronto usa invece `CEAN_Chiave`, `CART_Chiave`,
+`CALA_Chiave` sul lato carichi e i valori normalizzati sul lato XML.
 
 Per ogni riga XML si cercano le righe carico compatibili con una cascata di tre livelli:
 

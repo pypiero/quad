@@ -238,19 +238,19 @@ def verifica_merge(df_merge):
         "Senza DDT" in set(df_merge["NumeroDDT_Comune"]),
     )
     controlla(
-        "merge senza duplicati (9 righe)",
-        len(df_merge) == 9,
+        "merge senza duplicati (10 righe)",
+        len(df_merge) == 10,
         str(len(df_merge)),
     )
     controlla(
         "ogni riga XML compare una volta sola",
-        int(df_merge["ID_Riga_XML"].notna().sum()) == 7
+        int(df_merge["ID_Riga_XML"].notna().sum()) == 8
         and df_merge["ID_Riga_XML"].dropna().is_unique,
         str(int(df_merge["ID_Riga_XML"].notna().sum())),
     )
     controlla(
         "ogni riga carico compare una volta sola",
-        int(df_merge["Indice"].notna().sum()) == 6
+        int(df_merge["Indice"].notna().sum()) == 7
         and df_merge["Indice"].dropna().is_unique,
         str(int(df_merge["Indice"].notna().sum())),
     )
@@ -294,8 +294,74 @@ def verifica_codici(df_xml_righe):
     )
 
 
+def verifica_normalizzazione_carichi(df_fatture, df_merge, namespace):
+    titolo(6, "NORMALIZZAZIONE DEI CODICI SUL LATO CARICHI (cella [10])")
+
+    colonne = [
+        "mersy_fornitore(CFOR)",
+        "mersy_articolo_fornitore(CALA)",
+        "CALA_Chiave",
+        "mersy_articolo(CART)",
+        "CART_Chiave",
+        "mersy_ean(CEAN)",
+        "CEAN_Chiave",
+    ]
+    print(mostra(df_fatture[colonne]))
+
+    riga = df_fatture.loc[
+        df_fatture["mersy_fornitore(CFOR)"] == "F003"
+    ]
+
+    controlla(
+        "il carico conserva il codice originale",
+        riga["mersy_articolo_fornitore(CALA)"].eq("ART/002").all(),
+        str(riga["mersy_articolo_fornitore(CALA)"].tolist()),
+    )
+    controlla(
+        "il carico porta la chiave normalizzata (ART/002 -> ART002)",
+        riga["CALA_Chiave"].eq("ART002").all(),
+        str(riga["CALA_Chiave"].tolist()),
+    )
+    controlla(
+        "le chiavi dei codici esistono per tutti i livelli",
+        all(
+            colonna in df_fatture.columns
+            for colonna in ("CEAN_Chiave", "CART_Chiave", "CALA_Chiave")
+        ),
+    )
+    controlla(
+        "il carico si abbina grazie alla normalizzazione",
+        (df_merge.loc[df_merge["NumeroFattura"] == "00012", "StatoAbbinamento"]
+         == "Abbinato").all(),
+        str(df_merge.loc[df_merge["NumeroFattura"] == "00012",
+                         ["TipoMatch", "StatoAbbinamento"]].to_dict("records")),
+    )
+    controlla(
+        "l'abbinamento F003 avviene sul codice fornitore",
+        (df_merge.loc[df_merge["NumeroFattura"] == "00012", "TipoMatch"]
+         == "CALA").all(),
+        str(df_merge.loc[df_merge["NumeroFattura"] == "00012",
+                         "TipoMatch"].tolist()),
+    )
+
+    # refuso nel dizionario: non applicato ma segnalato
+    non_riconosciuti = namespace.get("campi_non_riconosciuti", [])
+    controlla(
+        "CampoCanonico sconosciuto segnalato (CODICE_FORNTORE)",
+        "CODICE_FORNTORE" in non_riconosciuti,
+        str(non_riconosciuti),
+    )
+    controlla(
+        "CampoCanonico sconosciuto non genera una regola applicata",
+        df_fatture.loc[
+            df_fatture["mersy_fornitore(CFOR)"] == "F003", "CALA_Chiave"
+        ].eq("ART002").all(),
+        "la regola SOLO_NUMERI sul refuso non deve toccare il codice",
+    )
+
+
 def verifica_dizionario(dizionari):
-    titolo(6, "DIAGNOSTICA DEL DIZIONARIO (cella [5])")
+    titolo(7, "DIAGNOSTICA DEL DIZIONARIO (cella [5])")
 
     print("Anomalie:")
     print(dizionari["Anomalie"].to_string(index=False))
@@ -317,11 +383,11 @@ def verifica_dizionario(dizionari):
 
 
 def verifica_perimetro(df_fatture):
-    titolo(7, "PERIMETRO E ANAGRAFICHE (celle [8]-[9])")
+    titolo(8, "PERIMETRO E ANAGRAFICHE (celle [8]-[9])")
 
     controlla(
         "filtro CDOCIAA = 60I applicato",
-        len(df_fatture) == 6,
+        len(df_fatture) == 7,
         f"righe nel perimetro: {len(df_fatture)}",
     )
     controlla(
@@ -346,7 +412,7 @@ def verifica_perimetro(df_fatture):
 
 
 def verifica_export(cartella_output, df_powerbi, namespace):
-    titolo(8, "EXPORT E TIPI DELLE CELLE (celle [16])")
+    titolo(9, "EXPORT E TIPI DELLE CELLE (celle [16])")
 
     for nome in ("riconciliazione.xlsx", "riconciliazione_powerbi.xlsx"):
         controlla(
@@ -474,7 +540,7 @@ def verifica_export(cartella_output, df_powerbi, namespace):
 
 
 def stampa_riepilogo():
-    titolo(9, "RIEPILOGO")
+    titolo(10, "RIEPILOGO")
 
     for nome, esito, dettaglio in ESITI:
         riga = ("PASS  " if esito else "FAIL  ") + nome
@@ -502,6 +568,11 @@ def main():
     verifica_map_ddt(namespace["map_ddt"])
     verifica_merge(namespace["df_merge"])
     verifica_codici(namespace["df_xml_righe"])
+    verifica_normalizzazione_carichi(
+        namespace["df_fatture"],
+        namespace["df_merge"],
+        namespace,
+    )
     verifica_dizionario(namespace["dizionari"])
     verifica_perimetro(namespace["df_fatture"])
     verifica_export(
