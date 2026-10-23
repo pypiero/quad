@@ -10,7 +10,13 @@ Il repository contiene:
 ```
 Notebook_2 (1).ipynb    tutto il processo (16 sezioni logiche in 2 celle)
 README.md               questo file
+docs/LOGICA.md          guida completa alla logica, cella per cella
+tests/                  test eseguibile su dati sintetici
 ```
+
+Per capire il codice in dettaglio, la guida di riferimento è [`docs/LOGICA.md`](docs/LOGICA.md):
+le tre chiavi del processo, le 16 sezioni una per una, le decisioni di progetto e come cercare un
+errore.
 
 ---
 
@@ -87,7 +93,7 @@ Le 16 sezioni sono marcate da commenti `# %% [n]`.
 
 La seconda cella del notebook è un blocco aggiuntivo `[16]` che costruisce il dataset ridotto per
 il report e lo salva in `export/riconciliazione_powerbi.xlsx` (un solo foglio `df_merge`,
-20 colonne). È l'output pensato per il consumo da parte del report.
+21 colonne). È l'output pensato per il consumo da parte del report.
 
 ### Dettagli sulle sorgenti XML
 
@@ -211,7 +217,7 @@ Sei fogli, uno per tabella:
 
 ### `export/riconciliazione_powerbi.xlsx` — dataset per il report
 
-Un solo foglio `df_merge`, 20 colonne:
+Un solo foglio `df_merge`, 21 colonne:
 
 ```
 Fattura, Data fattura, Bolla, Data bolla, Descrizione, Numero riga fattura,
@@ -219,8 +225,11 @@ Unità di misura, Codice articolo interno, Codice articolo fornitore, Codice EAN
 Quantità XML, Quantità carico, Differenza quantità,
 Prezzo unitario XML, Prezzo unitario carico,
 Totale XML, Totale Mersy, Differenza totali,
-Denominazione, Stato abbinamento
+CFOR, Denominazione, Stato abbinamento
 ```
+
+`CFOR` è il codice fornitore consolidato: quello dell'XML, altrimenti quello dei carichi. Resta
+vuoto solo quando la riga non ha nessuno dei due.
 
 Ogni colonna è un valore "consolidato" con una priorità dichiarata: prima il dato XML, poi
 quello del gestionale (es. `Fattura` = numero XML, altrimenti `NDOGIAA`; `Data bolla` = `DataDDT`,
@@ -238,7 +247,7 @@ pandas al momento della scrittura (`openpyxl`). In pratica:
 |---|---|
 | `Data fattura`, `Data bolla` | data reale (`datetime`), formato `DD/MM/YYYY` |
 | `Quantità *`, `Prezzo *`, `Totale *`, `Differenza *` | numero |
-| `Fattura`, `Bolla`, `Codice articolo *`, `Codice EAN`, `Descrizione`, `Unità di misura`, `Numero riga fattura`, `Denominazione`, `Stato abbinamento` | testo |
+| `Fattura`, `Bolla`, `Codice articolo *`, `Codice EAN`, `Descrizione`, `Unità di misura`, `Numero riga fattura`, `CFOR`, `Denominazione`, `Stato abbinamento` | testo |
 
 Le celle senza valore restano **vuote** (non `0`, non `NA`). Attenzione a due punti quando il file
 viene riletto da Power Query / Power BI: i codici numerici e gli EAN sono testo e vanno **forzati**

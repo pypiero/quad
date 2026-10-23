@@ -386,7 +386,7 @@ def verifica_export(cartella_output, df_powerbi):
 
     for colonna in (
         "Fattura", "Bolla", "Codice EAN", "Codice articolo interno",
-        "Codice articolo fornitore", "Numero riga fattura",
+        "Codice articolo fornitore", "Numero riga fattura", "CFOR",
         "Denominazione", "Stato abbinamento",
     ):
         controlla(
@@ -396,10 +396,24 @@ def verifica_export(cartella_output, df_powerbi):
         )
 
     controlla(
-        "il report ha 20 colonne",
-        len(intestazioni) == 20,
+        "il report ha 21 colonne",
+        len(intestazioni) == 21,
         f"trovate {len(intestazioni)}",
     )
+
+    # la colonna CFOR deve coincidere con il codice fornitore usato
+    # nel resto del processo, non essere un doppione vuoto
+    if "CFOR" in intestazioni:
+        posizione = intestazioni.index("CFOR")
+        valori_cfor = [
+            riga[posizione].value
+            for riga in foglio.iter_rows(min_row=2, max_row=foglio.max_row)
+        ]
+        controlla(
+            "CFOR valorizzato sulle righe con fornitore noto",
+            sum(1 for v in valori_cfor if v not in (None, "")) >= 8,
+            str(valori_cfor),
+        )
 
     print()
     print("Dataset del report:")
