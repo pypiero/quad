@@ -165,7 +165,7 @@ partenza, perché è da lì che il report prende i codici da mostrare.
 | `df_fatture` | riga di carico | [7]-[10] |
 | `map_ddt` | coppia DDT XML ↔ DDT carico | [14] |
 | `df_merge` | riga riconciliata (XML, carico o entrambe) | [15] |
-| `df_powerbi` | come `df_merge`, 24 colonne | blocco finale |
+| `df_powerbi` | come `df_merge`, 25 colonne | blocco finale |
 
 **Questo è il punto più importante da capire**: i due lati arrivano al merge con granularità
 diverse. L'XML parte da *linee* e arriva ad *articoli*; i carichi partono già da *articoli*. Se le
@@ -315,6 +315,27 @@ valore_pulito   → rimuove i caratteri di controllo (equivalente di Text.Clean)
 
 Funzioni di supporto: `riduci_zeri`, `solo_cifre`, `finalizza` (separatori + zeri), `prima_stringa`,
 `dividi` (equivalente di `Text.SplitAny`).
+
+**Il registro delle regole.** Le sette regole stanno in un unico dizionario:
+
+```python
+REGOLE = {
+    "RIMUOVI_SEPARATORI": (regola_rimuovi_separatori, "rimuove i separatori e gli zeri…"),
+    "NESSUNA_REGOLA":     (regola_nessuna,            "solo pulizia di base…"),
+    ...
+}
+```
+
+`normalizza()` cerca il nome e chiama la funzione, `stato_regola()` controlla che il nome esista
+(quindi si adegua da sola) e la sezione stampa la tabella insieme al default. Aggiungere una regola
+significa **una riga**: prima servivano tre modifiche in due punti diversi — l'elenco, il ramo `if`
+di `normalizza()` e la docstring — con il rischio concreto di dimenticarne una e trovarsi una
+regola che il dizionario accetta ma il codice non conosce.
+
+Il nome `RIMUOVI_SEPARATORI` sostituisce il vecchio `DDT_BASE`: la regola è nata per i DDT ma si usa
+anche sui codici articolo, e il nome lo diceva solo per metà. **Nessun alias**: un foglio che
+contiene ancora `DDT_BASE` viene segnalato come regola non riconosciuta e ricade sul default, che è
+la stessa regola — quindi il risultato non cambia, cambia solo l'avviso.
 
 **Regola non riconosciuta: non blocca.** Si applica `RIMUOVI_SEPARATORI` e `stato_regola()` restituisce
 `NON RICONOSCIUTA: <valore>`, così la sezione [6] la elenca. È una scelta deliberata: un errore di
@@ -626,6 +647,28 @@ Infine: aggancio dell'anagrafica per `CARF` (per segnalare i codici fornitore us
 e la colonna di lettura `NumeroDDT_Comune` (DDT XML → DDT abbinato → DDT derivato → `NDOGIAB` →
 `"Senza DDT"`).
 
+**6. Stato del DDT, a livello di bolla (`StatoDDT`).** Il DDT si abbina fra documenti, non fra righe.
+Ricavare lo stato dalla singola riga sarebbe sbagliato: una riga che esiste solo nei carichi su una
+bolla perfettamente riconciliata verrebbe etichettata come problema di documento, mentre è un
+problema di articolo.
+
+Si costruisce quindi una tabella `chiave comune → stato` e la si applica a tutte le righe, in ordine
+di precedenza:
+
+| Ordine | Fonte | Etichetta |
+|---|---|---|
+| 1 | coppie di `map_ddt` | `Bolla abbinata per numero` / `per data` / `per esclusione` (con `, data mancante`) |
+| 2 | chiavi davvero derivate (blocco 2-bis) | `Bolla dedotta dal carico` |
+| 3 | chiavi XML rimaste senza coppia | `Bolla XML senza riscontro nei carichi` |
+| 4 | chiavi carico rimaste senza coppia | `Bolla carico senza riscontro nell'XML` |
+
+Una bolla può risultare contemporaneamente abbinata e derivata: nell'esempio `00001` il `DatiDDT`
+non cita la linea dello sconto, quindi quella riga riceve la chiave per derivazione mentre le altre
+la ricevono da `map_ddt`. Vince l'abbinamento, la derivazione è solo un ripiego.
+
+Restano fuori dalla tabella due casi che non sono bolle: l'XML senza DDT con più bolle a carico
+(`Bolla ambigua: più bolle nel carico`) e la riga senza alcun DDT (`Nessuna bolla`).
+
 ### [16] Export diagnostico
 
 Sei fogli in `export/riconciliazione.xlsx`: `df_merge`, `map_ddt`, `df_xml_righe`, `df_fatture`,
@@ -637,7 +680,7 @@ permette di risalire a ogni passaggio.
 ## 6. Il blocco finale: il report
 
 La seconda cella del notebook costruisce `df_powerbi` e lo salva in
-`export/riconciliazione_powerbi.xlsx` (un foglio, 24 colonne).
+`export/riconciliazione_powerbi.xlsx` (un foglio, 25 colonne).
 
 ### 6.1 `coalesce_colonne`
 
@@ -871,11 +914,11 @@ Contiene tutto `df_xml_righe` (23 colonne), tutte le colonne dei carichi (26), i
 `NumeroRigheFattura`, `NumeroRigheFatturaGlobale`, `DDTCarico*`), gli stati (`TipoMatch`,
 `StatoDocumento`, `StatoAbbinamento`) e `NumeroDDT_Comune`.
 
-### `df_powerbi` (24 colonne, il report)
+### `df_powerbi` (25 colonne, il report)
 
 ```
 Fattura, Data fattura, CEAS, CFOR, Denominazione, Bolla, Data bolla,
-CPCO, CPCO descrizione, Descrizione, Numero riga fattura, Unità di misura,
+Stato DDT, CPCO, CPCO descrizione, Descrizione, Numero riga fattura, Unità di misura,
 Codice articolo interno, Codice articolo fornitore, Codice EAN,
 Quantità XML, Quantità carico, Differenza quantità, Prezzo unitario XML,
 Prezzo unitario carico, Totale XML, Totale Mersy, Differenza totali,
@@ -887,14 +930,14 @@ Stato abbinamento
 | Sezione | Funzioni |
 |---|---|
 | [3] | `testo` |
-| [4] | `in_testo`, `valore_pulito`, `regola_normalizzata`, `riduci_zeri`, `solo_cifre`, `finalizza`, `prima_stringa`, `dividi`, `normalizza`, `stato_regola` |
+| [4] | `in_testo`, `valore_pulito`, `regola_normalizzata`, `riduci_zeri`, `solo_cifre`, `finalizza`, `prima_stringa`, `dividi`, `regola_nessuna`, `regola_rimuovi_separatori`, `regola_solo_numeri`, `regola_estrai_prima`, `regola_estrai_ultima`, `REGOLE`, `regola_disponibile`, `normalizza`, `stato_regola` |
 | [5] | `chiave_cfor`, `chiave_testo`, `_leggi`, `prepara_dizionari`, `regola_codice_xml`, `regola_codice_carico`, `regola_ddt_xml`, `regola_ddt_carico`, `normalizza_*` |
 | [6] | `prendi_foglio` |
 | [7] | `read_source`, `apply_schema`, `validate_schema` |
 | [8] | `vuota_in_mancante`, `solo_chiavi_valide`, `ceas_da_nome_file` |
 | [13] | `campo_pivot`, `chiave_articolo_xml`, `somma_o_nulla`, `numeri_linea_xml` |
 | [14] | `valore_valido`, `maschera_valida`, `primo_valido`, `abbina_gruppo` |
-| [15] | `crea_lookup_codice`, `tipo_match`, `stato_documento`, `stato_abbinamento`, `numero_ddt_comune` |
+| [15] | `crea_lookup_codice`, `tipo_match`, `stato_documento`, `stato_abbinamento`, `numero_ddt_comune`, `stato_ddt_riga` |
 | report | `pulisci_testo`, `coalesce_colonne`, `crea_etichetta_fornitore` |
 
 ---

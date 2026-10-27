@@ -335,6 +335,133 @@ def verifica_ddt_derivato(df_merge):
     )
 
 
+def verifica_stato_ddt(df_merge):
+    titolo(5, "STATO DEL DDT, A LIVELLO DI BOLLA (cella [15], 8-bis)")
+
+    colonne = [
+        "NumeroFattura", "NumeroDDT_Comune", "StatoAbbinamento", "StatoDDT",
+    ]
+    print(mostra(df_merge[colonne]))
+
+    etichette = {
+        "Bolla abbinata per numero",
+        "Bolla abbinata per data",
+        "Bolla abbinata per esclusione",
+        "Bolla abbinata per esclusione, data mancante",
+        "Bolla dedotta dal carico",
+        "Bolla ambigua: più bolle nel carico",
+        "Bolla XML senza riscontro nei carichi",
+        "Bolla carico senza riscontro nell'XML",
+        "Nessuna bolla",
+    }
+
+    controlla(
+        "tutte le righe hanno uno stato riconosciuto",
+        set(df_merge["StatoDDT"]) <= etichette,
+        str(sorted(set(df_merge["StatoDDT"]) - etichette)),
+    )
+    controlla(
+        "nessuno stato mancante",
+        df_merge["StatoDDT"].notna().all(),
+        str(int(df_merge["StatoDDT"].isna().sum())),
+    )
+
+    # il punto centrale: lo stato e' della bolla, non della riga.
+    # La bolla A/001 di 00001 ha due righe abbinate e una che
+    # esiste solo nei carichi: devono dire tutte la stessa cosa.
+    stato_a001 = set(
+        df_merge.loc[
+            df_merge["NumeroDDT_Comune"] == "A/001", "StatoDDT"
+        ]
+    )
+    controlla(
+        "righe Solo carico e Abbinato della stessa bolla: stesso stato",
+        stato_a001 == {"Bolla abbinata per numero"},
+        str(sorted(stato_a001)),
+    )
+    solo_carico_a001 = df_merge.loc[
+        df_merge["NumeroDDT_Comune"].isin(["A/001", "A-001"])
+        & df_merge["StatoAbbinamento"].eq("Solo carico")
+    ]
+    controlla(
+        "la riga articolo non trovato non cambia lo stato della bolla",
+        len(solo_carico_a001) == 1
+        and solo_carico_a001["StatoDDT"].eq("Bolla abbinata per numero").all(),
+        str(solo_carico_a001[["StatoAbbinamento", "StatoDDT"]].to_dict("records")),
+    )
+
+    def stato(fattura, colonna="NumeroFattura", valore=None):
+        return set(
+            df_merge.loc[
+                df_merge[colonna] == (fattura if valore is None else valore),
+                "StatoDDT",
+            ]
+        )
+
+    controlla(
+        "abbinamento per numero (00012)",
+        stato("00012") == {"Bolla abbinata per numero"},
+        str(stato("00012")),
+    )
+    controlla(
+        "abbinamento per data (00002)",
+        stato("00002") == {"Bolla abbinata per data"},
+        str(stato("00002")),
+    )
+    controlla(
+        "abbinamento per esclusione con data mancante (7)",
+        stato("7") == {"Bolla abbinata per esclusione, data mancante"},
+        str(stato("7")),
+    )
+    controlla(
+        "bolla dedotta dal carico (00013)",
+        stato("00013") == {"Bolla dedotta dal carico"},
+        str(stato("00013")),
+    )
+    controlla(
+        "bolla ambigua (00014, riga XML senza DDT)",
+        set(
+            df_merge.loc[
+                (df_merge["NumeroFattura"] == "00014")
+                & df_merge["ID_Riga_XML"].notna(),
+                "StatoDDT",
+            ]
+        ) == {"Bolla ambigua: più bolle nel carico"},
+        str(stato("00014")),
+    )
+    controlla(
+        "bolla dei carichi non abbinata (00014, H/1 e H/2)",
+        set(
+            df_merge.loc[
+                df_merge["NumeroDDT_Comune"].isin(["H/1", "H/2"]), "StatoDDT"
+            ]
+        ) == {"Bolla carico senza riscontro nell'XML"},
+        str(df_merge.loc[
+            df_merge["NumeroDDT_Comune"].isin(["H/1", "H/2"]),
+            ["NumeroDDT_Comune", "StatoDDT"],
+        ].to_dict("records")),
+    )
+    controlla(
+        "bolla XML non abbinata (00003 / E/1)",
+        set(
+            df_merge.loc[df_merge["NumeroDDT_Comune"] == "E/1", "StatoDDT"]
+        ) == {"Bolla XML senza riscontro nei carichi"},
+        str(stato("00003")),
+    )
+    controlla(
+        "carico senza alcun DDT: nessuna bolla",
+        set(
+            df_merge.loc[
+                df_merge["NumeroDDT_Comune"] == "Senza DDT", "StatoDDT"
+            ]
+        ) <= {"Nessuna bolla", "Bolla ambigua: più bolle nel carico"},
+        str(df_merge.loc[
+            df_merge["NumeroDDT_Comune"] == "Senza DDT",
+            ["NumeroFattura", "StatoDDT"],
+        ].to_dict("records")),
+    )
+
+
 def verifica_codici(df_xml_righe):
     titolo(6, "CODICI ARTICOLO E NORMALIZZAZIONE (celle [12]-[13])")
 
@@ -583,7 +710,7 @@ def verifica_export(cartella_output, df_powerbi, namespace):
         "Fattura", "CEAS", "CFOR", "Denominazione", "Bolla",
         "CPCO descrizione", "Codice EAN", "Codice articolo interno",
         "Codice articolo fornitore", "Numero riga fattura",
-        "Stato abbinamento",
+        "Stato abbinamento", "Stato DDT",
     ):
         controlla(
             f"xlsx: {colonna} = testo",
@@ -592,8 +719,8 @@ def verifica_export(cartella_output, df_powerbi, namespace):
         )
 
     controlla(
-        "il report ha 24 colonne",
-        len(intestazioni) == 24,
+        "il report ha 25 colonne",
+        len(intestazioni) == 25,
         f"trovate {len(intestazioni)}",
     )
 
@@ -609,6 +736,12 @@ def verifica_export(cartella_output, df_powerbi, namespace):
             "Fattura", "Data fattura", "CEAS", "CFOR", "Denominazione", "Bolla",
         ],
         str(intestazioni[:6]),
+    )
+
+    controlla(
+        "Stato DDT subito dopo Data bolla",
+        intestazioni[6:9] == ["Data bolla", "Stato DDT", "CPCO"],
+        str(intestazioni[6:9]),
     )
 
     # la colonna CFOR deve coincidere con il codice fornitore usato
@@ -697,6 +830,7 @@ def main():
     verifica_map_ddt(namespace["map_ddt"])
     verifica_merge(namespace["df_merge"])
     verifica_ddt_derivato(namespace["df_merge"])
+    verifica_stato_ddt(namespace["df_merge"])
     verifica_codici(namespace["df_xml_righe"])
     verifica_normalizzazione_carichi(
         namespace["df_fatture"],

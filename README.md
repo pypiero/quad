@@ -93,7 +93,7 @@ Le 16 sezioni sono marcate da commenti `# %% [n]`.
 
 La seconda cella del notebook è un blocco aggiuntivo `[16]` che costruisce il dataset ridotto per
 il report e lo salva in `export/riconciliazione_powerbi.xlsx` (un solo foglio `df_merge`,
-24 colonne). È l'output pensato per il consumo da parte del report.
+25 colonne). È l'output pensato per il consumo da parte del report.
 
 ### Dettagli sulle sorgenti XML
 
@@ -143,6 +143,11 @@ Regole disponibili (le stesse per DDT e codici articolo):
 
 La pulizia di base è **sempre** applicata: `Text.Clean`-equivalente (rimozione dei caratteri non
 stampabili), trim, rimozione dello spazio non separabile, maiuscolo.
+
+Le regole sono definite in **un unico registro** nella sezione `[4]`: ogni voce associa il nome alla
+funzione e a una descrizione, e la tabella viene stampata a runtime insieme al default. Per
+aggiungere o modificare una regola si tocca solo quel blocco — `normalizza()` e la diagnostica lo
+leggono da soli. Prima servivano tre modifiche in due punti diversi.
 
 Una regola scritta male o una cella vuota **non bloccano** l'esecuzione: si applica `RIMUOVI_SEPARATORI` e
 l'anomalia viene elencata nella diagnostica della sezione `[6]` (regole non riconosciute, chiavi
@@ -242,6 +247,24 @@ nulla restano `Solo XML`, le righe carico non raggiunte restano `Solo carico`.
 | `MetodoMatchDDT` | `TESTO`, `DATA_UNIVOCA`, `UNICO_RESIDUO`, `UNICO_RESIDUO_DATA_MANCANTE` |
 | `TipoAbbinamentoDDT` | `ESPLICITO`, `IMPLICITO`, `NON_ABBINATO`, `NESSUN_DDT` |
 
+### `Stato DDT` (colonna del report)
+
+Lo stato della **bolla**, non della riga: tutte le righe della stessa bolla riportano lo stesso
+valore, anche quella che esiste solo nei carichi. Una riga `Solo carico` su una bolla riconciliata
+resta un problema di articolo, non di documento, e il suo `Stato DDT` lo dice.
+
+| Valore | Significato |
+|---|---|
+| `Bolla abbinata per numero` | numeri DDT identici dopo normalizzazione (metodo `TESTO`) |
+| `Bolla abbinata per data` | numeri diversi, ma un solo DDT per lato su quella data |
+| `Bolla abbinata per esclusione` | numeri diversi, resta un solo DDT per parte |
+| `Bolla abbinata per esclusione, data mancante` | come sopra, ma mancava una delle due date |
+| `Bolla dedotta dal carico` | l'XML non aveva DDT, la chiave viene dal DDT unico del carico |
+| `Bolla ambigua: più bolle nel carico` | l'XML non ha DDT e il carico ne ha più di uno: non si sceglie |
+| `Bolla XML senza riscontro nei carichi` | il DDT dell'XML non esiste fra i carichi |
+| `Bolla carico senza riscontro nell'XML` | il DDT del carico non esiste nell'XML |
+| `Nessuna bolla` | la riga non ha alcun DDT da nessuno dei due lati |
+
 La lettura tipica: `Solo XML` + `Documento trovato` = la fattura c'è, manca la riga a carico;
 `DDT non corrispondente` = il carico esiste ma il DDT è scritto diversamente (candidato a una
 nuova regola nel dizionario); `CFOR non corrispondente` = il numero fattura esiste ma sotto un
@@ -267,11 +290,11 @@ Sei fogli, uno per tabella:
 
 ### `export/riconciliazione_powerbi.xlsx` — dataset per il report
 
-Un solo foglio `df_merge`, 24 colonne:
+Un solo foglio `df_merge`, 25 colonne:
 
 ```
 Fattura, Data fattura, CEAS, CFOR, Denominazione, Bolla, Data bolla,
-CPCO, CPCO descrizione, Descrizione, Numero riga fattura, Unità di misura,
+Stato DDT, CPCO, CPCO descrizione, Descrizione, Numero riga fattura, Unità di misura,
 Codice articolo interno, Codice articolo fornitore, Codice EAN,
 Quantità XML, Quantità carico, Differenza quantità,
 Prezzo unitario XML, Prezzo unitario carico,
