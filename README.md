@@ -133,8 +133,8 @@ Regole disponibili (le stesse per DDT e codici articolo):
 
 | Regola | Effetto |
 |---|---|
-| `DDT_BASE` *(default)* | rimuove i separatori ` - / . _ :` e gli zeri iniziali se il valore è tutto numerico |
-| `RIMUOVI_ZERI` | come `DDT_BASE` |
+| `RIMUOVI_SEPARATORI` *(default)* | rimuove i separatori ` - / . _ :` e gli zeri iniziali se il valore è tutto numerico |
+| `RIMUOVI_ZERI` | come `RIMUOVI_SEPARATORI` |
 | `NESSUNA_REGOLA` | solo pulizia di base (trim, caratteri non stampabili, maiuscolo) |
 | `TESTO_MAIUSCOLO` | come `NESSUNA_REGOLA` |
 | `SOLO_NUMERI` | tiene solo le cifre, poi toglie gli zeri iniziali |
@@ -144,7 +144,7 @@ Regole disponibili (le stesse per DDT e codici articolo):
 La pulizia di base è **sempre** applicata: `Text.Clean`-equivalente (rimozione dei caratteri non
 stampabili), trim, rimozione dello spazio non separabile, maiuscolo.
 
-Una regola scritta male o una cella vuota **non bloccano** l'esecuzione: si applica `DDT_BASE` e
+Una regola scritta male o una cella vuota **non bloccano** l'esecuzione: si applica `RIMUOVI_SEPARATORI` e
 l'anomalia viene elencata nella diagnostica della sezione `[6]` (regole non riconosciute, chiavi
 duplicate). In caso di chiave duplicata vince la prima riga letta.
 
@@ -152,11 +152,11 @@ duplicate). In caso di chiave duplicata vince la prima riga letta.
 
 Le regole sono **per lato**. Una riga assente non equivale a `NESSUNA_REGOLA`: in entrambi i casi
 il valore viene ripulito (trim, maiuscolo), ma con `NESSUNA_REGOLA` restano i separatori, mentre
-senza riga si applica `DDT_BASE` che li toglie.
+senza riga si applica `RIMUOVI_SEPARATORI` che li toglie.
 
 ```
 XML   CODICE_FORNITORE  NESSUNA_REGOLA  →  ART/002
-carichi  (riga assente)  DDT_BASE       →  ART002      ← nessun match
+carichi  (riga assente)  RIMUOVI_SEPARATORI       →  ART002      ← nessun match
 ```
 
 Se il codice articolo è scritto **identico** sui due lati ma il dizionario non ha una riga per quel

@@ -138,7 +138,7 @@ XML_FILES = {
               codici=[("EAN", "8001111111111")]),
     ),
     # F003: il codice fornitore e' scritto diversamente sui due lati
-    # (ART002 nell'XML, ART/002 nel carico). Con la regola DDT_BASE
+    # (ART002 nell'XML, ART/002 nel carico). Con la regola RIMUOVI_SEPARATORI
     # applicata a entrambi i lati i due valori coincidono.
     "IT05555555555_00012.xml": xml_documento(
         "00012", "2024-10-01",
@@ -313,7 +313,7 @@ DIZIONARIO = {
          "RegolaNormalizzazione": "REGOLA_INVENTATA"},
         {"CFOR": "F003", "Denominazione": "tre", "CodiceTipoXML": "FORN",
          "CampoCanonico": "CODICE_FORNITORE",
-         "RegolaNormalizzazione": "DDT_BASE"},
+         "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
         # F009: regola presente solo sul lato XML. Il lato carichi non
         # ha la riga e ricade sul default, quindi le due chiavi non
         # coincidono: la diagnostica deve segnalarlo.
@@ -335,10 +335,10 @@ DIZIONARIO = {
          "RegolaNormalizzazione": "NESSUNA_REGOLA"},
         # duplicato: deve essere segnalato
         {"CFOR": "F001", "Denominazione": "uno", "CampoCanonico": "EAN",
-         "RegolaNormalizzazione": "DDT_BASE"},
+         "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
         {"CFOR": "F003", "Denominazione": "tre",
          "CampoCanonico": "CODICE_FORNITORE",
-         "RegolaNormalizzazione": "DDT_BASE"},
+         "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
         # refuso voluto: CODICE_FORNTORE invece di CODICE_FORNITORE.
         # La regola non deve essere applicata, ma il campo va segnalato.
         {"CFOR": "F003", "Denominazione": "tre",
@@ -347,7 +347,7 @@ DIZIONARIO = {
     ]),
     "RegoleDDT": pd.DataFrame([
         {"CFOR": "F001", "Denominazione": "uno",
-         "RegolaDDTXML": "DDT_BASE", "RegolaDDTCarico": "DDT_BASE"},
+         "RegolaDDTXML": "RIMUOVI_SEPARATORI", "RegolaDDTCarico": "RIMUOVI_SEPARATORI"},
         {"CFOR": "F002", "Denominazione": "due",
          "RegolaDDTXML": "NESSUNA_REGOLA",
          "RegolaDDTCarico": "NESSUNA_REGOLA"},

@@ -483,7 +483,7 @@ def verifica_regole_allineate(namespace):
             ["RegolaXML", "RegolaCarico"],
         ].to_dict("records") == [{
             "RegolaXML": "NESSUNA_REGOLA",
-            "RegolaCarico": "DDT_BASE (default)",
+            "RegolaCarico": "RIMUOVI_SEPARATORI (default)",
         }],
         str(tabella.to_dict("records")),
     )

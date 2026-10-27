@@ -305,8 +305,8 @@ valore_pulito   → rimuove i caratteri di controllo (equivalente di Text.Clean)
 
 | Regola | Cosa fa |
 |---|---|
-| `DDT_BASE` (default) | toglie i separatori `" -/._:"`, e se il risultato è tutto numerico toglie gli zeri iniziali |
-| `RIMUOVI_ZERI` | identica a `DDT_BASE` |
+| `RIMUOVI_SEPARATORI` (default) | toglie i separatori `" -/._:"`, e se il risultato è tutto numerico toglie gli zeri iniziali |
+| `RIMUOVI_ZERI` | identica a `RIMUOVI_SEPARATORI` |
 | `NESSUNA_REGOLA` | si ferma al livello 1 |
 | `TESTO_MAIUSCOLO` | identica a `NESSUNA_REGOLA` (il maiuscolo è già nel livello 1) |
 | `SOLO_NUMERI` | tiene solo le cifre e toglie gli zeri iniziali; se non resta nulla → None |
@@ -316,7 +316,7 @@ valore_pulito   → rimuove i caratteri di controllo (equivalente di Text.Clean)
 Funzioni di supporto: `riduci_zeri`, `solo_cifre`, `finalizza` (separatori + zeri), `prima_stringa`,
 `dividi` (equivalente di `Text.SplitAny`).
 
-**Regola non riconosciuta: non blocca.** Si applica `DDT_BASE` e `stato_regola()` restituisce
+**Regola non riconosciuta: non blocca.** Si applica `RIMUOVI_SEPARATORI` e `stato_regola()` restituisce
 `NON RICONOSCIUTA: <valore>`, così la sezione [6] la elenca. È una scelta deliberata: un errore di
 battitura nel dizionario non deve fermare la produzione, ma non deve nemmeno passare inosservato.
 
@@ -434,11 +434,11 @@ inosservato.
 
 **Coerenza fra i due lati.** I due lati leggono il dizionario in modo asimmetrico: l'XML per
 `(CFOR, CodiceTipoXML)`, i carichi per `(CFOR, CampoCanonico)`. Poiché quando la regola manca si
-applica `REGOLA_DEFAULT` (`DDT_BASE`), una riga assente **non** equivale a `NESSUNA_REGOLA`:
+applica `REGOLA_DEFAULT` (`RIMUOVI_SEPARATORI`), una riga assente **non** equivale a `NESSUNA_REGOLA`:
 
 ```
 XML       NESSUNA_REGOLA  →  ART/002     (separatori mantenuti)
-carichi   riga assente    →  ART002      (DDT_BASE: separatori rimossi)
+carichi   riga assente    →  ART002      (RIMUOVI_SEPARATORI: separatori rimossi)
 ```
 
 Stesso codice, due chiavi, nessun match e nessun errore. La sezione confronta quindi le regole
