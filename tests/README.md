@@ -64,13 +64,15 @@ il test si adegua da solo.
 3. **Abbinamento DDT** — i tre livelli `TESTO`, `DATA_UNIVOCA`, `UNICO_RESIDUO_DATA_MANCANTE`;
 4. **DDT derivato** — XML senza bolla agganciato al DDT unico del carico, e caso con più DDT
    lasciato non abbinato con lo stato dedicato `DDT_AMBIGUO`;
-5. **Merge finale** — cascata EAN → CART → CALA, righe `Solo XML` / `Solo carico`, assenza di duplicati;
-6. **Codici articolo** — normalizzazione per fornitore, righe senza codice, nature (`SC`, …);
-7. **Normalizzazione sul lato carichi** — `CEAN` / `CART` / `CALA` da `RegoleCodiciCarico`, refuso nel
-   `CampoCanonico` segnalato senza bloccare;
-8. **Dizionario** — regola non riconosciuta e chiave duplicata segnalate senza bloccare;
-9. **Perimetro e anagrafiche** — filtro `CDOCIAA`, precedenza `TDEC` su `CARF`, punti di consegna;
-10. **Export** — file creati e tipo delle celle nell'xlsx (date, numeri, testo).
+5. **Stato DDT** — etichetta di bolla (non di riga): una riga `Solo carico` su una bolla
+   riconciliata riporta lo stato della bolla, e tutti i nove valori sono coperti;
+6. **Merge finale** — cascata EAN → CART → CALA, righe `Solo XML` / `Solo carico`, assenza di duplicati;
+7. **Codici articolo** — normalizzazione per fornitore, righe senza codice, nature (`SC`, …);
+8. **Normalizzazione sul lato carichi** — `CEAN` / `CART` / `CALA` da `RegoleCodiciCarico`, refuso nel
+   `CampoCanonico` segnalato senza bloccare, regole disallineate fra i due fogli segnalate;
+9. **Dizionario** — regola non riconosciuta e chiave duplicata segnalate senza bloccare;
+10. **Perimetro e anagrafiche** — filtro `CDOCIAA`, precedenza `TDEC` su `CARF`, punti di consegna;
+11. **Export** — file creati e tipo delle celle nell'xlsx (date, numeri, testo).
 
 ## Provare il test contro un'altra versione del notebook
 
