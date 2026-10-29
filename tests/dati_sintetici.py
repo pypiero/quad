@@ -160,6 +160,18 @@ XML_FILES = {
         linea(1, "PANE INTEGRALE", 1, 2.00, 2.00, "KG",
               codici=[("EAN", "8001111111111")]),
     ),
+    # F001/00020: nota di credito (60C). Il 60C e' nel perimetro come
+    # il 60I, quindi la riga merce si abbina normalmente; la riga di
+    # sconto non ha codice articolo e resta Solo XML.
+    "IT01111111111_00020.xml": xml_documento(
+        "00020", "2024-12-01",
+        ddt("R/20", "2024-11-25", [1]),
+        "".join([
+            linea(1, "RESO MERCE", 3, -2.00, -6.00, "KG",
+                  codici=[("FORN", "ART-006")]),
+            linea(2, "SCONTO RESO", 1, -1.00, -1.00, natura="SC"),
+        ]),
+    ),
     # Non FPR12: va scartato in lettura.
     "IT04444444444_00011.xml": xml_documento(
         "11", "2024-05-02", "",
@@ -247,6 +259,13 @@ CARICHI = pd.DataFrame([
             CEAS="IT01111111111_00014",
             **{"Qtà": 1, "Importo_ns_fattura": 2.00, "PF02IAL": 2.00,
                "QTA ORDINE": 1, "QTA ACCETT": 1}),
+    # carico della nota di credito: tipo documento 60C
+    _carico(CFOR="F001", NDOGIAA="00020", TDATIAA="2024-12-01",
+            NDOGIAB="R/20", TDATIAB="2024-11-25", CART="C006",
+            XART="RESO MERCE", CALA="ART-006", CUMF="KG",
+            CEAS="IT01111111111_00020", CDOCIAA="60C",
+            **{"Qtà": 3, "Importo_ns_fattura": -6.00, "PF02IAL": -2.00,
+               "QTA ORDINE": 3, "QTA ACCETT": 3}),
     # fuori perimetro: tipo documento diverso da 60I
     _carico(CFOR="F009", NDOGIAA="999", TDATIAA="2024-01-01",
             NDOGIAB="Q/1", TDATIAB="2024-01-01", CART="C009",
@@ -271,6 +290,7 @@ EAN = pd.DataFrame([
     {"CART": "C003", "SBAR": "EAN", "CEAN": "8003333333333"},
     {"CART": "C004", "SBAR": "EAN", "CEAN": "8004444444444"},
     {"CART": "C005", "SBAR": "EAN", "CEAN": "8005555555555"},
+    {"CART": "C006", "SBAR": "EAN", "CEAN": "8006666666666"},
 ])
 
 CARF = pd.DataFrame([
@@ -287,6 +307,8 @@ CARF = pd.DataFrame([
      "CARF": "F22-1", "XARF": "YOGURT"},
     {"CART": "C005", "CFOR": "F003", "TDEC": "2024-01-01",
      "CARF": "ART/002", "XARF": "RICOTTA"},
+    {"CART": "C006", "CFOR": "F001", "TDEC": "2024-01-01",
+     "CARF": "ART-006", "XARF": "RESO"},
 ])
 
 

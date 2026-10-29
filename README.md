@@ -58,8 +58,9 @@ Sorgente dei carichi selezionabile con `SOURCE_TYPE`:
 
 Il processo non lavora su tutto: valgono contemporaneamente due filtri.
 
-1. **Tipo documento**: `CDOCIAA = "60I"` (costante `CDOCIAA_FILTRO`), applicato subito dopo la
-   tipizzazione, prima di ogni join.
+1. **Tipo documento**: `CDOCIAA` in `60I` (fattura) o `60C` (nota di credito) — costante
+   `CDOCIAA_FILTRO`, una lista — applicato subito dopo la tipizzazione, prima di ogni join. Per
+   aggiungere una sigla basta scriverla nella lista.
 2. **Presenza dell'XML**: i carichi vengono messi in inner join con le testate XML sulla coppia
    `CEAS + NDOGIAA`, dove `CEAS` è il nome del file XML senza estensione (es. `IT01234567890_00007.xml`
    → `IT01234567890_00007`) e `NDOGIAA` è il numero fattura.

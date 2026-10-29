@@ -183,7 +183,7 @@ esiste esattamente per questo.
 | `NDOGIAA` | numero documento (fattura) | entrambi |
 | `NDOGIAB` | numero DDT | carichi |
 | `TDATIAA` / `TDATIAB` | data fattura / data DDT | carichi |
-| `CDOCIAA` | tipo documento; il perimetro è `60I` | carichi |
+| `CDOCIAA` | tipo documento; il perimetro è `60I` + `60C` | carichi |
 | `CART` | codice articolo interno | carichi |
 | `CALA` | codice articolo fornitore "grezzo" | carichi |
 | `CARF` | codice articolo fornitore da anagrafica | anagrafica |
@@ -217,7 +217,7 @@ Un unico punto in cui si dichiara dove stanno le cose. Nessuna logica.
 | `cartella` | percorso OneLake (abfss://…) |
 | `SOURCE_TYPE` | `"excel"` (attivo) o `"table"` (futuro: `spark.table(TABLE_NAME)`) |
 | `CARICHI_FILE`, `CARICHI_SHEET` | Excel dei carichi |
-| `CDOCIAA_FILTRO` | `"60I"`, il perimetro |
+| `CDOCIAA_FILTRO` | `["60I", "60C"]`, il perimetro |
 | `zip_path`, `zip_locale_python` | ZIP degli XML e sua copia locale |
 | `percorso_dizionari` | Excel con le regole |
 | `CPCO_FILE`, `EAN_FILE`, `CARF_FILE` | anagrafiche |
@@ -395,7 +395,7 @@ continua a funzionare.
 `validate_schema()` blocca l'esecuzione se manca una colonna attesa: meglio un errore chiaro subito
 che un merge silenziosamente sbagliato dopo.
 
-Poi il **filtro sul tipo documento** (`CDOCIAA == "60I"`) e la rinomina in nomi parlanti, per
+Poi il **filtro sul tipo documento** (`CDOCIAA` in `60I` / `60C`) e la rinomina in nomi parlanti, per
 esempio `CFOR` → `mersy_fornitore(CFOR)`. La rinomina serve a non confondere mai i due lati: se in
 `df_merge` leggi `mersy_*` sai che il valore viene dal gestionale.
 
@@ -842,8 +842,12 @@ cui intervenire.
 ## 10. Cosa il codice non fa
 
 - **non calcola l'IVA** né alcun totale di documento: lavora solo sulle righe;
-- **non gestisce le note di credito** come casi speciali: filtra `CDOCIAA = 60I`, quindi se una
-  fattura è collegata a una nota di credito la differenza emerge come differenza, non viene stornata;
+- **non gestisce le note di credito** come casi speciali: le fa entrare nel perimetro come le
+  fatture (`60C` accanto a `60I`), quindi i loro importi negativi emergono come differenza e non
+  vengono stornati sulle fatture collegate;
+- **le note di credito non hanno DDT**: la logica di abbinamento del documento è rimasta invariata,
+  quindi una riga senza alcun DDT non riceve una chiave comune e resta `Solo XML` / `Solo carico`
+  anche quando il codice articolo coincide. È una scelta deliberata, non un effetto collaterale;
 - **non verifica la quadratura** (`CSTQ`) né gli ordini (`QTA ORDINE`, `QTA ACCETT`): le colonne
   sono lette e portate nel merge, ma non usate nelle regole;
 - **non estrae `AliquotaIVA`** né `CodiceFiscale` di linea: se servissero, la sezione [13] li

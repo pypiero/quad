@@ -135,7 +135,7 @@ def verifica_denominazione(df_xml_fatture, df_xml_righe, df_merge):
             ]
         ) == {"FORNITORE 00001 SRL", "FORNITORE 00002 SRL",
               "FORNITORE 00003 SRL", "FORNITORE 00013 SRL",
-              "FORNITORE 00014 SRL"},
+              "FORNITORE 00014 SRL", "FORNITORE 00020 SRL"},
         str(sorted(set(df_xml_fatture["Denominazione"]))),
     )
     controlla(
@@ -241,19 +241,19 @@ def verifica_merge(df_merge):
         "Senza DDT" in set(df_merge["NumeroDDT_Comune"]),
     )
     controlla(
-        "merge senza duplicati (14 righe)",
-        len(df_merge) == 14,
+        "merge senza duplicati (16 righe)",
+        len(df_merge) == 16,
         str(len(df_merge)),
     )
     controlla(
         "ogni riga XML compare una volta sola",
-        int(df_merge["ID_Riga_XML"].notna().sum()) == 10
+        int(df_merge["ID_Riga_XML"].notna().sum()) == 12
         and df_merge["ID_Riga_XML"].dropna().is_unique,
         str(int(df_merge["ID_Riga_XML"].notna().sum())),
     )
     controlla(
         "ogni riga carico compare una volta sola",
-        int(df_merge["Indice"].notna().sum()) == 10
+        int(df_merge["Indice"].notna().sum()) == 11
         and df_merge["Indice"].dropna().is_unique,
         str(int(df_merge["Indice"].notna().sum())),
     )
@@ -642,9 +642,27 @@ def verifica_perimetro(df_fatture):
     titolo(10, "PERIMETRO E ANAGRAFICHE (celle [8]-[9])")
 
     controlla(
-        "filtro CDOCIAA = 60I applicato",
-        len(df_fatture) == 10,
+        "filtro CDOCIAA: 60I e 60C nel perimetro",
+        len(df_fatture) == 11,
         f"righe nel perimetro: {len(df_fatture)}",
+    )
+    controlla(
+        "la nota di credito 60C entra nel perimetro",
+        set(
+            df_fatture.loc[
+                df_fatture["mersy_tipo_documento(CDOCIAA)"] == "60C",
+                "mersy_n_fattura(NDOGIAA)",
+            ]
+        ) == {"00020"},
+        str(df_fatture.loc[
+            df_fatture["mersy_tipo_documento(CDOCIAA)"] == "60C",
+            "mersy_n_fattura(NDOGIAA)",
+        ].tolist()),
+    )
+    controlla(
+        "un tipo documento fuori elenco resta escluso",
+        "99X" not in set(df_fatture["mersy_tipo_documento(CDOCIAA)"]),
+        str(sorted(set(df_fatture["mersy_tipo_documento(CDOCIAA)"]))),
     )
     controlla(
         "CARF sostituisce CALA usando il TDEC più recente",
