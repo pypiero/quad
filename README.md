@@ -94,7 +94,7 @@ Le 16 sezioni sono marcate da commenti `# %% [n]`.
 
 La seconda cella del notebook è un blocco aggiuntivo `[16]` che costruisce il dataset ridotto per
 il report e lo salva in `export/riconciliazione_powerbi.xlsx` (un solo foglio `df_merge`,
-25 colonne). È l'output pensato per il consumo da parte del report.
+26 colonne). È l'output pensato per il consumo da parte del report.
 
 ### Dettagli sulle sorgenti XML
 
@@ -248,6 +248,16 @@ nulla restano `Solo XML`, le righe carico non raggiunte restano `Solo carico`.
 | `MetodoMatchDDT` | `TESTO`, `DATA_UNIVOCA`, `UNICO_RESIDUO`, `UNICO_RESIDUO_DATA_MANCANTE` |
 | `TipoAbbinamentoDDT` | `ESPLICITO`, `IMPLICITO`, `NON_ABBINATO`, `NESSUN_DDT` |
 
+### `Tipologia documento` (colonna del report)
+
+`60I` = fattura, `60C` = nota di credito (l'elenco è `CDOCIAA_FILTRO`, in cima al notebook: per
+aggiungere una sigla basta scriverla lì).
+
+È un attributo del **documento**, non della riga: si legge dal carico e viene riportata anche sulle
+righe che esistono solo nell'XML, ricavandola dal carico della stessa fattura. Resta **vuota** quando
+la fattura non esiste nei carichi: il tipo SDI dell'XML (`TD01`, `TD04`, …) è un codice diverso e non
+esiste una mappatura su `CDOCIAA` — se serve, va decisa e aggiunta.
+
 ### `Stato DDT` (colonna del report)
 
 Lo stato della **bolla**, non della riga: tutte le righe della stessa bolla riportano lo stesso
@@ -291,11 +301,12 @@ Sei fogli, uno per tabella:
 
 ### `export/riconciliazione_powerbi.xlsx` — dataset per il report
 
-Un solo foglio `df_merge`, 25 colonne:
+Un solo foglio `df_merge`, 26 colonne:
 
 ```
-Fattura, Data fattura, CEAS, CFOR, Denominazione, Bolla, Data bolla,
-Stato DDT, CPCO, CPCO descrizione, Descrizione, Numero riga fattura, Unità di misura,
+Fattura, Data fattura, Tipologia documento, CEAS, CFOR, Denominazione, Bolla,
+Data bolla, Stato DDT, CPCO, CPCO descrizione, Descrizione, Numero riga fattura,
+Unità di misura,
 Codice articolo interno, Codice articolo fornitore, Codice EAN,
 Quantità XML, Quantità carico, Differenza quantità,
 Prezzo unitario XML, Prezzo unitario carico,

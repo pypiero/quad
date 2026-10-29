@@ -165,7 +165,7 @@ partenza, perché è da lì che il report prende i codici da mostrare.
 | `df_fatture` | riga di carico | [7]-[10] |
 | `map_ddt` | coppia DDT XML ↔ DDT carico | [14] |
 | `df_merge` | riga riconciliata (XML, carico o entrambe) | [15] |
-| `df_powerbi` | come `df_merge`, 25 colonne | blocco finale |
+| `df_powerbi` | come `df_merge`, 26 colonne | blocco finale |
 
 **Questo è il punto più importante da capire**: i due lati arrivano al merge con granularità
 diverse. L'XML parte da *linee* e arriva ad *articoli*; i carichi partono già da *articoli*. Se le
@@ -647,6 +647,16 @@ Infine: aggancio dell'anagrafica per `CARF` (per segnalare i codici fornitore us
 e la colonna di lettura `NumeroDDT_Comune` (DDT XML → DDT abbinato → DDT derivato → `NDOGIAB` →
 `"Senza DDT"`).
 
+**6-bis. Tipologia del documento (`TipologiaDocumento`).** `CDOCIAA` distingue fatture e note di
+credito, ma esiste solo sui carichi. La mappa si costruisce **per numero fattura**: così funziona
+anche sulle righe XML prive di `CFOR` (fattura assente dai carichi, dove il fornitore non è
+conoscibile). Un numero che risultasse associato a più tipologie viene escluso dalla mappa e
+conteggiato: meglio vuoto che un valore scelto a caso.
+
+Ordine di risoluzione: valore della riga di carico → carico della stessa fattura → vuoto. Il tipo SDI
+dell'XML (`TD01`, `TD04`, …) **non** viene usato: è un codice di natura diversa da `CDOCIAA` e non
+esiste una mappatura. Resta un punto aperto, segnalato anche nel codice.
+
 **6. Stato del DDT, a livello di bolla (`StatoDDT`).** Il DDT si abbina fra documenti, non fra righe.
 Ricavare lo stato dalla singola riga sarebbe sbagliato: una riga che esiste solo nei carichi su una
 bolla perfettamente riconciliata verrebbe etichettata come problema di documento, mentre è un
@@ -680,7 +690,7 @@ permette di risalire a ogni passaggio.
 ## 6. Il blocco finale: il report
 
 La seconda cella del notebook costruisce `df_powerbi` e lo salva in
-`export/riconciliazione_powerbi.xlsx` (un foglio, 25 colonne).
+`export/riconciliazione_powerbi.xlsx` (un foglio, 26 colonne).
 
 ### 6.1 `coalesce_colonne`
 
@@ -918,11 +928,12 @@ Contiene tutto `df_xml_righe` (23 colonne), tutte le colonne dei carichi (26), i
 `NumeroRigheFattura`, `NumeroRigheFatturaGlobale`, `DDTCarico*`), gli stati (`TipoMatch`,
 `StatoDocumento`, `StatoAbbinamento`) e `NumeroDDT_Comune`.
 
-### `df_powerbi` (25 colonne, il report)
+### `df_powerbi` (26 colonne, il report)
 
 ```
-Fattura, Data fattura, CEAS, CFOR, Denominazione, Bolla, Data bolla,
-Stato DDT, CPCO, CPCO descrizione, Descrizione, Numero riga fattura, Unità di misura,
+Fattura, Data fattura, Tipologia documento, CEAS, CFOR, Denominazione, Bolla,
+Data bolla, Stato DDT, CPCO, CPCO descrizione, Descrizione, Numero riga fattura,
+Unità di misura,
 Codice articolo interno, Codice articolo fornitore, Codice EAN,
 Quantità XML, Quantità carico, Differenza quantità, Prezzo unitario XML,
 Prezzo unitario carico, Totale XML, Totale Mersy, Differenza totali,
