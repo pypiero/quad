@@ -58,8 +58,9 @@ Sorgente dei carichi selezionabile con `SOURCE_TYPE`:
 
 Il processo non lavora su tutto: valgono contemporaneamente due filtri.
 
-1. **Tipo documento**: `CDOCIAA = "60I"` (costante `CDOCIAA_FILTRO`), applicato subito dopo la
-   tipizzazione, prima di ogni join.
+1. **Tipo documento**: `CDOCIAA` in `60I` (fattura) o `60C` (nota di credito) — costante
+   `CDOCIAA_FILTRO`, una lista — applicato subito dopo la tipizzazione, prima di ogni join. Per
+   aggiungere una sigla basta scriverla nella lista.
 2. **Presenza dell'XML**: i carichi vengono messi in inner join con le testate XML sulla coppia
    `CEAS + NDOGIAA`, dove `CEAS` è il nome del file XML senza estensione (es. `IT01234567890_00007.xml`
    → `IT01234567890_00007`) e `NDOGIAA` è il numero fattura.
@@ -93,7 +94,7 @@ Le 16 sezioni sono marcate da commenti `# %% [n]`.
 
 La seconda cella del notebook è un blocco aggiuntivo `[16]` che costruisce il dataset ridotto per
 il report e lo salva in `export/riconciliazione_powerbi.xlsx` (un solo foglio `df_merge`,
-25 colonne). È l'output pensato per il consumo da parte del report.
+26 colonne). È l'output pensato per il consumo da parte del report.
 
 ### Dettagli sulle sorgenti XML
 
@@ -247,6 +248,16 @@ nulla restano `Solo XML`, le righe carico non raggiunte restano `Solo carico`.
 | `MetodoMatchDDT` | `TESTO`, `DATA_UNIVOCA`, `UNICO_RESIDUO`, `UNICO_RESIDUO_DATA_MANCANTE` |
 | `TipoAbbinamentoDDT` | `ESPLICITO`, `IMPLICITO`, `NON_ABBINATO`, `NESSUN_DDT` |
 
+### `Tipologia documento` (colonna del report)
+
+`60I` = fattura, `60C` = nota di credito (l'elenco è `CDOCIAA_FILTRO`, in cima al notebook: per
+aggiungere una sigla basta scriverla lì).
+
+È un attributo del **documento**, non della riga: si legge dal carico e viene riportata anche sulle
+righe che esistono solo nell'XML, ricavandola dal carico della stessa fattura. Resta **vuota** quando
+la fattura non esiste nei carichi: il tipo SDI dell'XML (`TD01`, `TD04`, …) è un codice diverso e non
+esiste una mappatura su `CDOCIAA` — se serve, va decisa e aggiunta.
+
 ### `Stato DDT` (colonna del report)
 
 Lo stato della **bolla**, non della riga: tutte le righe della stessa bolla riportano lo stesso
@@ -277,7 +288,7 @@ riga va guardata a mano.
 
 ### `export/riconciliazione.xlsx` — diagnostica
 
-Sei fogli, uno per tabella:
+Sei fogli, uno per tabella, più uno opzionale:
 
 | Foglio | Contenuto |
 |---|---|
@@ -287,14 +298,40 @@ Sei fogli, uno per tabella:
 | `df_fatture` | lato carichi nel perimetro |
 | `df_xml_fatture` | lato XML, una riga per linea |
 | `df_xml_codici_articolo` | lato XML, una riga per codice |
+| `ArticoliNonAbbinati` | **opzionale**, vedi sotto |
+
+### `ArticoliNonAbbinati` — articoli mai riconciliati
+
+Arriva dalla sezione `[15-bis]`, un blocco **autonomo e rimovibile** in fondo alla prima cella: se lo
+cancelli, il foglio semplicemente non viene creato e il resto funziona lo stesso.
+
+Contiene gli articoli che non si sono agganciati **nemmeno una volta**. L'unità è l'articolo, non la
+riga: un articolo che si abbina in una fattura e non in un'altra non è "mai abbinato" e viene
+escluso. Per questo si contano prima le righe abbinate di tutto il perimetro, poi si tengono solo
+quelle con zero.
+
+| Colonna | Significato |
+|---|---|
+| `Origine` | `XML` oppure `Carico` |
+| `CFOR`, `Denominazione` | fornitore |
+| `CodiceArticoloCliente` / `CodiceArticoloFornitore` / `EAN` | i codici dell'articolo |
+| `DescrizioneXML` | descrizione dall'XML (vuota sul lato carico) |
+| `DescrizioneCarico` | descrizione da Mersy (vuota sul lato XML) |
+| `TipoChiave` | `EAN` / `CART` / `CALA` / `SCONTO` / `RIGA DESCRITTIVA` / `CARICO` — serve a distinguere un articolo vero da una riga senza codice (sconto, riga descrittiva) |
+| `ChiaveArticoloXML` | la chiave su cui è raggruppato (lato carico: `CART|…`) |
+| `Righe`, `Fatture` | quante righe e quante fatture distinte riguardano l'articolo |
+
+Il lato carichi è raggruppato sul **codice articolo interno** (`CART`), la chiave più stabile
+disponibile, perché per una riga mai abbinata non si sa quale codice avrebbe usato l'XML.
 
 ### `export/riconciliazione_powerbi.xlsx` — dataset per il report
 
-Un solo foglio `df_merge`, 25 colonne:
+Un solo foglio `df_merge`, 26 colonne:
 
 ```
-Fattura, Data fattura, CEAS, CFOR, Denominazione, Bolla, Data bolla,
-Stato DDT, CPCO, CPCO descrizione, Descrizione, Numero riga fattura, Unità di misura,
+Fattura, Data fattura, Tipologia documento, CEAS, CFOR, Denominazione, Bolla,
+Data bolla, Stato DDT, CPCO, CPCO descrizione, Descrizione, Numero riga fattura,
+Unità di misura,
 Codice articolo interno, Codice articolo fornitore, Codice EAN,
 Quantità XML, Quantità carico, Differenza quantità,
 Prezzo unitario XML, Prezzo unitario carico,

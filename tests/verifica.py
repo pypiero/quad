@@ -135,7 +135,7 @@ def verifica_denominazione(df_xml_fatture, df_xml_righe, df_merge):
             ]
         ) == {"FORNITORE 00001 SRL", "FORNITORE 00002 SRL",
               "FORNITORE 00003 SRL", "FORNITORE 00013 SRL",
-              "FORNITORE 00014 SRL"},
+              "FORNITORE 00014 SRL", "FORNITORE 00020 SRL"},
         str(sorted(set(df_xml_fatture["Denominazione"]))),
     )
     controlla(
@@ -241,19 +241,19 @@ def verifica_merge(df_merge):
         "Senza DDT" in set(df_merge["NumeroDDT_Comune"]),
     )
     controlla(
-        "merge senza duplicati (14 righe)",
-        len(df_merge) == 14,
+        "merge senza duplicati (16 righe)",
+        len(df_merge) == 16,
         str(len(df_merge)),
     )
     controlla(
         "ogni riga XML compare una volta sola",
-        int(df_merge["ID_Riga_XML"].notna().sum()) == 10
+        int(df_merge["ID_Riga_XML"].notna().sum()) == 12
         and df_merge["ID_Riga_XML"].dropna().is_unique,
         str(int(df_merge["ID_Riga_XML"].notna().sum())),
     )
     controlla(
         "ogni riga carico compare una volta sola",
-        int(df_merge["Indice"].notna().sum()) == 10
+        int(df_merge["Indice"].notna().sum()) == 11
         and df_merge["Indice"].dropna().is_unique,
         str(int(df_merge["Indice"].notna().sum())),
     )
@@ -335,8 +335,78 @@ def verifica_ddt_derivato(df_merge):
     )
 
 
+def verifica_tipologia(df_merge, df_powerbi):
+    titolo(5, "TIPOLOGIA DEL DOCUMENTO (cella [15], 8-ter)")
+
+    colonne = [
+        "NumeroFattura", "TipologiaDocumento", "StatoAbbinamento",
+    ]
+    print(df_merge[colonne].to_string(index=False))
+
+    def tipologie(fattura):
+        return set(
+            df_merge.loc[
+                df_merge["NumeroFattura"] == fattura, "TipologiaDocumento"
+            ]
+        )
+
+    controlla(
+        "fattura 60I riconosciuta",
+        tipologie("00001") == {"60I"},
+        str(tipologie("00001")),
+    )
+    controlla(
+        "nota di credito 60C riconosciuta",
+        tipologie("00020") == {"60C"},
+        str(tipologie("00020")),
+    )
+    controlla(
+        "riga Solo XML: tipologia ricavata dal carico della fattura",
+        set(
+            df_merge.loc[
+                (df_merge["NumeroFattura"] == "00001")
+                & df_merge["ID_Riga_XML"].notna()
+                & df_merge["StatoAbbinamento"].eq("Solo XML"),
+                "TipologiaDocumento",
+            ]
+        ) == {"60I"},
+        str(df_merge.loc[
+            df_merge["NumeroFattura"] == "00001",
+            ["StatoAbbinamento", "TipologiaDocumento"],
+        ].to_dict("records")),
+    )
+    controlla(
+        "riga Solo XML di una nota di credito: 60C dal carico",
+        set(
+            df_merge.loc[
+                (df_merge["NumeroFattura"] == "00020")
+                & df_merge["StatoAbbinamento"].eq("Solo XML"),
+                "TipologiaDocumento",
+            ]
+        ) == {"60C"},
+        str(df_merge.loc[
+            df_merge["NumeroFattura"] == "00020",
+            ["StatoAbbinamento", "TipologiaDocumento"],
+        ].to_dict("records")),
+    )
+    controlla(
+        "fattura assente dai carichi: tipologia vuota, non inventata",
+        df_merge.loc[
+            df_merge["NumeroFattura"] == "9", "TipologiaDocumento"
+        ].isna().all(),
+        str(df_merge.loc[
+            df_merge["NumeroFattura"] == "9", "TipologiaDocumento"
+        ].tolist()),
+    )
+    controlla(
+        "solo 60I e 60C nel report",
+        set(df_powerbi["Tipologia documento"].dropna()) <= {"60I", "60C"},
+        str(sorted(set(df_powerbi["Tipologia documento"].dropna()))),
+    )
+
+
 def verifica_stato_ddt(df_merge):
-    titolo(5, "STATO DEL DDT, A LIVELLO DI BOLLA (cella [15], 8-bis)")
+    titolo(6, "STATO DEL DDT, A LIVELLO DI BOLLA (cella [15], 8-bis)")
 
     colonne = [
         "NumeroFattura", "NumeroDDT_Comune", "StatoAbbinamento", "StatoDDT",
@@ -463,7 +533,7 @@ def verifica_stato_ddt(df_merge):
 
 
 def verifica_codici(df_xml_righe):
-    titolo(6, "CODICI ARTICOLO E NORMALIZZAZIONE (celle [12]-[13])")
+    titolo(7, "CODICI ARTICOLO E NORMALIZZAZIONE (celle [12]-[13])")
 
     print(mostra(df_xml_righe[[
         "CFOR", "NumeroFattura", "ChiaveArticoloXML", "EAN",
@@ -501,7 +571,7 @@ def verifica_codici(df_xml_righe):
 
 
 def verifica_normalizzazione_carichi(df_fatture, df_merge, namespace):
-    titolo(7, "NORMALIZZAZIONE DEI CODICI SUL LATO CARICHI (cella [10])")
+    titolo(8, "NORMALIZZAZIONE DEI CODICI SUL LATO CARICHI (cella [10])")
 
     colonne = [
         "mersy_fornitore(CFOR)",
@@ -567,7 +637,7 @@ def verifica_normalizzazione_carichi(df_fatture, df_merge, namespace):
 
 
 def verifica_dizionario(dizionari):
-    titolo(8, "DIAGNOSTICA DEL DIZIONARIO (cella [5])")
+    titolo(9, "DIAGNOSTICA DEL DIZIONARIO (cella [5])")
 
     print("Anomalie:")
     print(dizionari["Anomalie"].to_string(index=False))
@@ -589,7 +659,7 @@ def verifica_dizionario(dizionari):
 
 
 def verifica_regole_allineate(namespace):
-    titolo(9, "COERENZA DELLE REGOLE FRA I DUE LATI (cella [10])")
+    titolo(10, "COERENZA DELLE REGOLE FRA I DUE LATI (cella [10])")
 
     tabella = namespace["regole_non_allineate"]
 
@@ -639,12 +709,30 @@ def verifica_regole_allineate(namespace):
 
 
 def verifica_perimetro(df_fatture):
-    titolo(10, "PERIMETRO E ANAGRAFICHE (celle [8]-[9])")
+    titolo(11, "PERIMETRO E ANAGRAFICHE (celle [8]-[9])")
 
     controlla(
-        "filtro CDOCIAA = 60I applicato",
-        len(df_fatture) == 10,
+        "filtro CDOCIAA: 60I e 60C nel perimetro",
+        len(df_fatture) == 11,
         f"righe nel perimetro: {len(df_fatture)}",
+    )
+    controlla(
+        "la nota di credito 60C entra nel perimetro",
+        set(
+            df_fatture.loc[
+                df_fatture["mersy_tipo_documento(CDOCIAA)"] == "60C",
+                "mersy_n_fattura(NDOGIAA)",
+            ]
+        ) == {"00020"},
+        str(df_fatture.loc[
+            df_fatture["mersy_tipo_documento(CDOCIAA)"] == "60C",
+            "mersy_n_fattura(NDOGIAA)",
+        ].tolist()),
+    )
+    controlla(
+        "un tipo documento fuori elenco resta escluso",
+        "99X" not in set(df_fatture["mersy_tipo_documento(CDOCIAA)"]),
+        str(sorted(set(df_fatture["mersy_tipo_documento(CDOCIAA)"]))),
     )
     controlla(
         "CARF sostituisce CALA usando il TDEC più recente",
@@ -667,8 +755,124 @@ def verifica_perimetro(df_fatture):
     )
 
 
+def verifica_articoli_non_abbinati(df_articoli_non_abbinati, df_merge,
+                                   cartella_output):
+    titolo(12, "ARTICOLI MAI ABBINATI (sezione [15-bis])")
+
+    print(df_articoli_non_abbinati.to_string(index=False))
+
+    articoli = df_articoli_non_abbinati
+
+    controlla(
+        "la tabella contiene entrambi i lati",
+        set(articoli["Origine"]) == {"XML", "Carico"},
+        str(sorted(set(articoli["Origine"]))),
+    )
+    # il controllo che conta: nessuna chiave di questa tabella deve
+    # avere anche una sola riga abbinata nel merge
+    abbinate_xml = set(
+        df_merge.loc[
+            df_merge["StatoAbbinamento"].eq("Abbinato"),
+            "ChiaveArticoloXML",
+        ].dropna()
+    )
+    abbinate_carico = set(
+        df_merge.loc[
+            df_merge["StatoAbbinamento"].eq("Abbinato"),
+            "mersy_articolo(CART)",
+        ].dropna()
+    )
+
+    controlla(
+        "nessuna chiave XML con abbinamenti nel merge",
+        not (
+            set(
+                articoli.loc[articoli["Origine"].eq("XML"),
+                             "ChiaveArticoloXML"]
+            ) & abbinate_xml
+        ),
+        str(sorted(
+            set(articoli.loc[articoli["Origine"].eq("XML"),
+                             "ChiaveArticoloXML"]) & abbinate_xml
+        )),
+    )
+    controlla(
+        "nessun CART con abbinamenti nel merge",
+        not (
+            set(
+                articoli.loc[articoli["Origine"].eq("Carico"),
+                             "CodiceArticoloCliente"]
+            ) & abbinate_carico
+        ),
+        str(sorted(
+            set(articoli.loc[articoli["Origine"].eq("Carico"),
+                             "CodiceArticoloCliente"]) & abbinate_carico
+        )),
+    )
+    controlla(
+        "un articolo abbinato altrove non finisce nell'elenco",
+        not articoli.loc[
+            articoli["Origine"].eq("XML")
+            & articoli["ChiaveArticoloXML"].eq("EAN|8001111111111")
+        ].shape[0],
+        "EAN|8001111111111 si abbina su altre fatture",
+    )
+    controlla(
+        "lato XML: la riga di sconto senza codice e' segnalata",
+        "SCONTO" in set(articoli["TipoChiave"]),
+        str(sorted(set(articoli["TipoChiave"]))),
+    )
+    controlla(
+        "lato carico: articolo mai incontrato nell'XML",
+        set(
+            articoli.loc[articoli["Origine"].eq("Carico"),
+                         "CodiceArticoloFornitore"]
+        ) == {"ART-003"},
+        str(articoli.loc[articoli["Origine"].eq("Carico"),
+                         "CodiceArticoloFornitore"].tolist()),
+    )
+    controlla(
+        "entrambe le descrizioni sono presenti come colonne",
+        {"DescrizioneXML", "DescrizioneCarico"} <= set(articoli.columns),
+        str(list(articoli.columns)),
+    )
+    controlla(
+        "descrizione XML valorizzata solo sul lato XML",
+        articoli.loc[articoli["Origine"].eq("Carico"),
+                     "DescrizioneXML"].isna().all()
+        and articoli.loc[articoli["Origine"].eq("XML"),
+                         "DescrizioneXML"].notna().all(),
+        str(articoli[["Origine", "DescrizioneXML"]].to_dict("records")),
+    )
+    controlla(
+        "descrizione carico valorizzata solo sul lato carico",
+        articoli.loc[articoli["Origine"].eq("XML"),
+                     "DescrizioneCarico"].isna().all()
+        and articoli.loc[articoli["Origine"].eq("Carico"),
+                         "DescrizioneCarico"].notna().all(),
+        str(articoli[["Origine", "DescrizioneCarico"]].to_dict("records")),
+    )
+    controlla(
+        "conteggio delle fatture presente e coerente",
+        {"Righe", "Fatture"} <= set(articoli.columns)
+        and int(articoli["Righe"].sum()) >= len(articoli),
+        str(articoli[["Righe", "Fatture"]].to_dict("records")),
+    )
+
+    percorso = Path(cartella_output) / "riconciliazione.xlsx"
+    if not percorso.exists():
+        return
+
+    fogli = openpyxl.load_workbook(percorso).sheetnames
+    controlla(
+        "foglio ArticoliNonAbbinati esportato",
+        "ArticoliNonAbbinati" in fogli,
+        str(fogli),
+    )
+
+
 def verifica_export(cartella_output, df_powerbi, namespace):
-    titolo(11, "EXPORT E TIPI DELLE CELLE (celle [16])")
+    titolo(13, "EXPORT E TIPI DELLE CELLE (celle [16])")
 
     for nome in ("riconciliazione.xlsx", "riconciliazione_powerbi.xlsx"):
         controlla(
@@ -710,7 +914,7 @@ def verifica_export(cartella_output, df_powerbi, namespace):
         "Fattura", "CEAS", "CFOR", "Denominazione", "Bolla",
         "CPCO descrizione", "Codice EAN", "Codice articolo interno",
         "Codice articolo fornitore", "Numero riga fattura",
-        "Stato abbinamento", "Stato DDT",
+        "Stato abbinamento", "Stato DDT", "Tipologia documento",
     ):
         controlla(
             f"xlsx: {colonna} = testo",
@@ -719,8 +923,8 @@ def verifica_export(cartella_output, df_powerbi, namespace):
         )
 
     controlla(
-        "il report ha 25 colonne",
-        len(intestazioni) == 25,
+        "il report ha 26 colonne",
+        len(intestazioni) == 26,
         f"trovate {len(intestazioni)}",
     )
 
@@ -732,16 +936,17 @@ def verifica_export(cartella_output, df_powerbi, namespace):
 
     controlla(
         "ordine delle colonne come da specifica",
-        intestazioni[:6] == [
-            "Fattura", "Data fattura", "CEAS", "CFOR", "Denominazione", "Bolla",
+        intestazioni[:7] == [
+            "Fattura", "Data fattura", "Tipologia documento", "CEAS", "CFOR",
+            "Denominazione", "Bolla",
         ],
-        str(intestazioni[:6]),
+        str(intestazioni[:7]),
     )
 
     controlla(
         "Stato DDT subito dopo Data bolla",
-        intestazioni[6:9] == ["Data bolla", "Stato DDT", "CPCO"],
-        str(intestazioni[6:9]),
+        intestazioni[7:10] == ["Data bolla", "Stato DDT", "CPCO"],
+        str(intestazioni[7:10]),
     )
 
     # la colonna CFOR deve coincidere con il codice fornitore usato
@@ -802,7 +1007,7 @@ def verifica_export(cartella_output, df_powerbi, namespace):
 
 
 def stampa_riepilogo():
-    titolo(12, "RIEPILOGO")
+    titolo(14, "RIEPILOGO")
 
     for nome, esito, dettaglio in ESITI:
         riga = ("PASS  " if esito else "FAIL  ") + nome
@@ -830,6 +1035,7 @@ def main():
     verifica_map_ddt(namespace["map_ddt"])
     verifica_merge(namespace["df_merge"])
     verifica_ddt_derivato(namespace["df_merge"])
+    verifica_tipologia(namespace["df_merge"], namespace["df_powerbi"])
     verifica_stato_ddt(namespace["df_merge"])
     verifica_codici(namespace["df_xml_righe"])
     verifica_normalizzazione_carichi(
@@ -840,6 +1046,11 @@ def main():
     verifica_dizionario(namespace["dizionari"])
     verifica_regole_allineate(namespace)
     verifica_perimetro(namespace["df_fatture"])
+    verifica_articoli_non_abbinati(
+        namespace["df_articoli_non_abbinati"],
+        namespace["df_merge"],
+        namespace["_cartella_output"],
+    )
     verifica_export(
         namespace["_cartella_output"],
         namespace["df_powerbi"],

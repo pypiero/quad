@@ -165,7 +165,8 @@ partenza, perché è da lì che il report prende i codici da mostrare.
 | `df_fatture` | riga di carico | [7]-[10] |
 | `map_ddt` | coppia DDT XML ↔ DDT carico | [14] |
 | `df_merge` | riga riconciliata (XML, carico o entrambe) | [15] |
-| `df_powerbi` | come `df_merge`, 25 colonne | blocco finale |
+| `df_powerbi` | come `df_merge`, 26 colonne | blocco finale |
+| `df_articoli_non_abbinati` | articoli mai riconciliati, i due lati insieme | [15-bis] (opzionale) |
 
 **Questo è il punto più importante da capire**: i due lati arrivano al merge con granularità
 diverse. L'XML parte da *linee* e arriva ad *articoli*; i carichi partono già da *articoli*. Se le
@@ -183,7 +184,7 @@ esiste esattamente per questo.
 | `NDOGIAA` | numero documento (fattura) | entrambi |
 | `NDOGIAB` | numero DDT | carichi |
 | `TDATIAA` / `TDATIAB` | data fattura / data DDT | carichi |
-| `CDOCIAA` | tipo documento; il perimetro è `60I` | carichi |
+| `CDOCIAA` | tipo documento; il perimetro è `60I` + `60C` | carichi |
 | `CART` | codice articolo interno | carichi |
 | `CALA` | codice articolo fornitore "grezzo" | carichi |
 | `CARF` | codice articolo fornitore da anagrafica | anagrafica |
@@ -217,7 +218,7 @@ Un unico punto in cui si dichiara dove stanno le cose. Nessuna logica.
 | `cartella` | percorso OneLake (abfss://…) |
 | `SOURCE_TYPE` | `"excel"` (attivo) o `"table"` (futuro: `spark.table(TABLE_NAME)`) |
 | `CARICHI_FILE`, `CARICHI_SHEET` | Excel dei carichi |
-| `CDOCIAA_FILTRO` | `"60I"`, il perimetro |
+| `CDOCIAA_FILTRO` | `["60I", "60C"]`, il perimetro |
 | `zip_path`, `zip_locale_python` | ZIP degli XML e sua copia locale |
 | `percorso_dizionari` | Excel con le regole |
 | `CPCO_FILE`, `EAN_FILE`, `CARF_FILE` | anagrafiche |
@@ -395,7 +396,7 @@ continua a funzionare.
 `validate_schema()` blocca l'esecuzione se manca una colonna attesa: meglio un errore chiaro subito
 che un merge silenziosamente sbagliato dopo.
 
-Poi il **filtro sul tipo documento** (`CDOCIAA == "60I"`) e la rinomina in nomi parlanti, per
+Poi il **filtro sul tipo documento** (`CDOCIAA` in `60I` / `60C`) e la rinomina in nomi parlanti, per
 esempio `CFOR` → `mersy_fornitore(CFOR)`. La rinomina serve a non confondere mai i due lati: se in
 `df_merge` leggi `mersy_*` sai che il valore viene dal gestionale.
 
@@ -647,6 +648,16 @@ Infine: aggancio dell'anagrafica per `CARF` (per segnalare i codici fornitore us
 e la colonna di lettura `NumeroDDT_Comune` (DDT XML → DDT abbinato → DDT derivato → `NDOGIAB` →
 `"Senza DDT"`).
 
+**6-bis. Tipologia del documento (`TipologiaDocumento`).** `CDOCIAA` distingue fatture e note di
+credito, ma esiste solo sui carichi. La mappa si costruisce **per numero fattura**: così funziona
+anche sulle righe XML prive di `CFOR` (fattura assente dai carichi, dove il fornitore non è
+conoscibile). Un numero che risultasse associato a più tipologie viene escluso dalla mappa e
+conteggiato: meglio vuoto che un valore scelto a caso.
+
+Ordine di risoluzione: valore della riga di carico → carico della stessa fattura → vuoto. Il tipo SDI
+dell'XML (`TD01`, `TD04`, …) **non** viene usato: è un codice di natura diversa da `CDOCIAA` e non
+esiste una mappatura. Resta un punto aperto, segnalato anche nel codice.
+
 **6. Stato del DDT, a livello di bolla (`StatoDDT`).** Il DDT si abbina fra documenti, non fra righe.
 Ricavare lo stato dalla singola riga sarebbe sbagliato: una riga che esiste solo nei carichi su una
 bolla perfettamente riconciliata verrebbe etichettata come problema di documento, mentre è un
@@ -680,7 +691,24 @@ permette di risalire a ogni passaggio.
 ## 6. Il blocco finale: il report
 
 La seconda cella del notebook costruisce `df_powerbi` e lo salva in
-`export/riconciliazione_powerbi.xlsx` (un foglio, 25 colonne).
+`export/riconciliazione_powerbi.xlsx` (un foglio, 26 colonne).
+
+Prima dell'esportazione c'è la sezione **[15-bis]**, un blocco **opzionale e rimovibile** che produce
+`df_articoli_non_abbinati`: gli articoli che non si sono agganciati nemmeno una volta, dai due lati in
+una sola tabella (colonna `Origine`). Si regge su una distinzione che vale la pena tenere a mente:
+
+- **riga non abbinata ≠ articolo mai abbinato.** `EAN|8001111111111` compare su quattro fatture; su
+  due si abbina e su due no. Non è un articolo "mai abbinato" e non deve finire nell'elenco, altrimenti
+  lo strumento segnala rumore invece di problemi;
+- il raggruppamento è per articolo **dentro il fornitore** (`CFOR + ChiaveArticoloXML` sul lato XML,
+  `CFOR + CART` sul lato carichi), perché lo stesso codice può esistere presso fornitori diversi;
+- il lato carichi usa il codice interno `CART`: per una riga mai abbinata non si sa quale codice
+  avrebbe usato l'XML, quindi si sceglie la chiave più stabile;
+- `TipoChiave` separa gli articoli veri dalle righe senza codice (`SCONTO`, `RIGA DESCRITTIVA`), che
+  altrimenti riempirebbero l'elenco: non sono articoli mancanti, sono righe che non hanno un codice.
+
+La sezione non alimenta nulla a valle: la [16] la esporta come foglio `ArticoliNonAbbinati` **solo se
+la variabile esiste**, quindi cancellare il blocco non rompe niente.
 
 ### 6.1 `coalesce_colonne`
 
@@ -842,8 +870,12 @@ cui intervenire.
 ## 10. Cosa il codice non fa
 
 - **non calcola l'IVA** né alcun totale di documento: lavora solo sulle righe;
-- **non gestisce le note di credito** come casi speciali: filtra `CDOCIAA = 60I`, quindi se una
-  fattura è collegata a una nota di credito la differenza emerge come differenza, non viene stornata;
+- **non gestisce le note di credito** come casi speciali: le fa entrare nel perimetro come le
+  fatture (`60C` accanto a `60I`), quindi i loro importi negativi emergono come differenza e non
+  vengono stornati sulle fatture collegate;
+- **le note di credito non hanno DDT**: la logica di abbinamento del documento è rimasta invariata,
+  quindi una riga senza alcun DDT non riceve una chiave comune e resta `Solo XML` / `Solo carico`
+  anche quando il codice articolo coincide. È una scelta deliberata, non un effetto collaterale;
 - **non verifica la quadratura** (`CSTQ`) né gli ordini (`QTA ORDINE`, `QTA ACCETT`): le colonne
   sono lette e portate nel merge, ma non usate nelle regole;
 - **non estrae `AliquotaIVA`** né `CodiceFiscale` di linea: se servissero, la sezione [13] li
@@ -914,11 +946,12 @@ Contiene tutto `df_xml_righe` (23 colonne), tutte le colonne dei carichi (26), i
 `NumeroRigheFattura`, `NumeroRigheFatturaGlobale`, `DDTCarico*`), gli stati (`TipoMatch`,
 `StatoDocumento`, `StatoAbbinamento`) e `NumeroDDT_Comune`.
 
-### `df_powerbi` (25 colonne, il report)
+### `df_powerbi` (26 colonne, il report)
 
 ```
-Fattura, Data fattura, CEAS, CFOR, Denominazione, Bolla, Data bolla,
-Stato DDT, CPCO, CPCO descrizione, Descrizione, Numero riga fattura, Unità di misura,
+Fattura, Data fattura, Tipologia documento, CEAS, CFOR, Denominazione, Bolla,
+Data bolla, Stato DDT, CPCO, CPCO descrizione, Descrizione, Numero riga fattura,
+Unità di misura,
 Codice articolo interno, Codice articolo fornitore, Codice EAN,
 Quantità XML, Quantità carico, Differenza quantità, Prezzo unitario XML,
 Prezzo unitario carico, Totale XML, Totale Mersy, Differenza totali,
