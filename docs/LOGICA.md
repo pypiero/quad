@@ -166,7 +166,6 @@ partenza, perché è da lì che il report prende i codici da mostrare.
 | `map_ddt` | coppia DDT XML ↔ DDT carico | [14] |
 | `df_merge` | riga riconciliata (XML, carico o entrambe) | [15] |
 | `df_powerbi` | come `df_merge`, 26 colonne | blocco finale |
-| `df_articoli_non_abbinati` | articoli mai riconciliati, i due lati insieme | [15-bis] (opzionale) |
 
 **Questo è il punto più importante da capire**: i due lati arrivano al merge con granularità
 diverse. L'XML parte da *linee* e arriva ad *articoli*; i carichi partono già da *articoli*. Se le
@@ -693,23 +692,6 @@ permette di risalire a ogni passaggio.
 La seconda cella del notebook costruisce `df_powerbi` e lo salva in
 `export/riconciliazione_powerbi.xlsx` (un foglio, 26 colonne).
 
-Prima dell'esportazione c'è la sezione **[15-bis]**, un blocco **opzionale e rimovibile** che produce
-`df_articoli_non_abbinati`: gli articoli che non si sono agganciati nemmeno una volta, dai due lati in
-una sola tabella (colonna `Origine`). Si regge su una distinzione che vale la pena tenere a mente:
-
-- **riga non abbinata ≠ articolo mai abbinato.** `EAN|8001111111111` compare su quattro fatture; su
-  due si abbina e su due no. Non è un articolo "mai abbinato" e non deve finire nell'elenco, altrimenti
-  lo strumento segnala rumore invece di problemi;
-- il raggruppamento è per articolo **dentro il fornitore** (`CFOR + ChiaveArticoloXML` sul lato XML,
-  `CFOR + CART` sul lato carichi), perché lo stesso codice può esistere presso fornitori diversi;
-- il lato carichi usa il codice interno `CART`: per una riga mai abbinata non si sa quale codice
-  avrebbe usato l'XML, quindi si sceglie la chiave più stabile;
-- `TipoChiave` separa gli articoli veri dalle righe senza codice (`SCONTO`, `RIGA DESCRITTIVA`), che
-  altrimenti riempirebbero l'elenco: non sono articoli mancanti, sono righe che non hanno un codice.
-
-La sezione non alimenta nulla a valle: la [16] la esporta come foglio `ArticoliNonAbbinati` **solo se
-la variabile esiste**, quindi cancellare il blocco non rompe niente.
-
 ### 6.1 `coalesce_colonne`
 
 Il cuore del report. Riceve un elenco ordinato di colonne e restituisce, riga per riga, **il primo
@@ -736,12 +718,24 @@ opzionali, che potrebbero non esistere.
 | `Codice EAN` | `EAN` | `mersy_ean(CEAN)` | — |
 | `Quantità XML` | `Quantita` | — | — |
 | `Quantità carico` | `mersy_qta_fattura(Qtà)` | — | — |
-| `Differenza quantità` | `Quantità XML − Quantità carico` | — | — |
+| `Differenza quantità` | `\|Quantità XML\| − \|Quantità carico\|` (valori assoluti) | — | — |
 | `Prezzo unitario XML` | `PrezzoUnitarioNetto` | — | — |
 | `Prezzo unitario carico` | `mersy_prezzo_fattura(PF02IAL)` | — | — |
 | `Totale XML` | `PrezzoTotale` | — | — |
 | `Totale Mersy` | `mersy_importo_ns_accettazione(Importo_ns_fattura)` | — | — |
-| `Differenza totali` | `Totale XML − Totale Mersy` | — | — |
+| `Differenza totali` | `Totale XML − Totale Mersy` (con il segno) | — | — |
+
+**Perché la differenza quantità usa i valori assoluti.** Una nota di credito ha quantità negative in
+Mersy mentre l'XML le riporta positive (o viceversa). Sottraendo i valori con segno, una riga `6`
+contro `-6` darebbe `12`: un disallineamento inventato dal segno, che non è un errore ma il tipo di
+documento (vedi `Tipologia documento`). Neutralizzando il segno il risultato è `0`, che è la risposta
+giusta: le due quantità coincidono.
+
+Le colonne `Quantità XML` e `Quantità carico` **restano con il segno originale**: il valore assoluto
+si applica solo al calcolo della differenza. La stessa correzione **non** è stata applicata a
+`Differenza totali`, che continua a essere una sottrazione con il segno: se in futuro servirà lo
+stesso trattamento, è una riga sola, ma va deciso esplicitamente perché gli importi di una nota di
+credito possono avere segno opposto per motivi contabili e non solo per come è scritto il documento.
 | `CPCO` | `mersy_punto_consegna(CPCO)` | — | — (vuoto senza carico) |
 | `CPCO descrizione` | `mersy_descrizione_punto_consegna(XPCO)` | — | — |
 | `Stato abbinamento` | `StatoAbbinamento` | — | — |

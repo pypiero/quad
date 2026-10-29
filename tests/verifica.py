@@ -336,7 +336,7 @@ def verifica_ddt_derivato(df_merge):
 
 
 def verifica_tipologia(df_merge, df_powerbi):
-    titolo(5, "TIPOLOGIA DEL DOCUMENTO (cella [15], 8-ter)")
+    titolo(6, "TIPOLOGIA DEL DOCUMENTO (cella [15], 8-ter)")
 
     colonne = [
         "NumeroFattura", "TipologiaDocumento", "StatoAbbinamento",
@@ -406,7 +406,7 @@ def verifica_tipologia(df_merge, df_powerbi):
 
 
 def verifica_stato_ddt(df_merge):
-    titolo(6, "STATO DEL DDT, A LIVELLO DI BOLLA (cella [15], 8-bis)")
+    titolo(7, "STATO DEL DDT, A LIVELLO DI BOLLA (cella [15], 8-bis)")
 
     colonne = [
         "NumeroFattura", "NumeroDDT_Comune", "StatoAbbinamento", "StatoDDT",
@@ -533,7 +533,7 @@ def verifica_stato_ddt(df_merge):
 
 
 def verifica_codici(df_xml_righe):
-    titolo(7, "CODICI ARTICOLO E NORMALIZZAZIONE (celle [12]-[13])")
+    titolo(8, "CODICI ARTICOLO E NORMALIZZAZIONE (celle [12]-[13])")
 
     print(mostra(df_xml_righe[[
         "CFOR", "NumeroFattura", "ChiaveArticoloXML", "EAN",
@@ -571,7 +571,7 @@ def verifica_codici(df_xml_righe):
 
 
 def verifica_normalizzazione_carichi(df_fatture, df_merge, namespace):
-    titolo(8, "NORMALIZZAZIONE DEI CODICI SUL LATO CARICHI (cella [10])")
+    titolo(9, "NORMALIZZAZIONE DEI CODICI SUL LATO CARICHI (cella [10])")
 
     colonne = [
         "mersy_fornitore(CFOR)",
@@ -637,7 +637,7 @@ def verifica_normalizzazione_carichi(df_fatture, df_merge, namespace):
 
 
 def verifica_dizionario(dizionari):
-    titolo(9, "DIAGNOSTICA DEL DIZIONARIO (cella [5])")
+    titolo(10, "DIAGNOSTICA DEL DIZIONARIO (cella [5])")
 
     print("Anomalie:")
     print(dizionari["Anomalie"].to_string(index=False))
@@ -659,7 +659,7 @@ def verifica_dizionario(dizionari):
 
 
 def verifica_regole_allineate(namespace):
-    titolo(10, "COERENZA DELLE REGOLE FRA I DUE LATI (cella [10])")
+    titolo(11, "COERENZA DELLE REGOLE FRA I DUE LATI (cella [10])")
 
     tabella = namespace["regole_non_allineate"]
 
@@ -709,7 +709,7 @@ def verifica_regole_allineate(namespace):
 
 
 def verifica_perimetro(df_fatture):
-    titolo(11, "PERIMETRO E ANAGRAFICHE (celle [8]-[9])")
+    titolo(12, "PERIMETRO E ANAGRAFICHE (celle [8]-[9])")
 
     controlla(
         "filtro CDOCIAA: 60I e 60C nel perimetro",
@@ -752,122 +752,6 @@ def verifica_perimetro(df_fatture):
         "riga fuori perimetro assente dal lato carichi",
         "FUORI PERIMETRO"
         not in set(df_fatture["mersy_descrizione_articolo(XART)"]),
-    )
-
-
-def verifica_articoli_non_abbinati(df_articoli_non_abbinati, df_merge,
-                                   cartella_output):
-    titolo(12, "ARTICOLI MAI ABBINATI (sezione [15-bis])")
-
-    print(df_articoli_non_abbinati.to_string(index=False))
-
-    articoli = df_articoli_non_abbinati
-
-    controlla(
-        "la tabella contiene entrambi i lati",
-        set(articoli["Origine"]) == {"XML", "Carico"},
-        str(sorted(set(articoli["Origine"]))),
-    )
-    # il controllo che conta: nessuna chiave di questa tabella deve
-    # avere anche una sola riga abbinata nel merge
-    abbinate_xml = set(
-        df_merge.loc[
-            df_merge["StatoAbbinamento"].eq("Abbinato"),
-            "ChiaveArticoloXML",
-        ].dropna()
-    )
-    abbinate_carico = set(
-        df_merge.loc[
-            df_merge["StatoAbbinamento"].eq("Abbinato"),
-            "mersy_articolo(CART)",
-        ].dropna()
-    )
-
-    controlla(
-        "nessuna chiave XML con abbinamenti nel merge",
-        not (
-            set(
-                articoli.loc[articoli["Origine"].eq("XML"),
-                             "ChiaveArticoloXML"]
-            ) & abbinate_xml
-        ),
-        str(sorted(
-            set(articoli.loc[articoli["Origine"].eq("XML"),
-                             "ChiaveArticoloXML"]) & abbinate_xml
-        )),
-    )
-    controlla(
-        "nessun CART con abbinamenti nel merge",
-        not (
-            set(
-                articoli.loc[articoli["Origine"].eq("Carico"),
-                             "CodiceArticoloCliente"]
-            ) & abbinate_carico
-        ),
-        str(sorted(
-            set(articoli.loc[articoli["Origine"].eq("Carico"),
-                             "CodiceArticoloCliente"]) & abbinate_carico
-        )),
-    )
-    controlla(
-        "un articolo abbinato altrove non finisce nell'elenco",
-        not articoli.loc[
-            articoli["Origine"].eq("XML")
-            & articoli["ChiaveArticoloXML"].eq("EAN|8001111111111")
-        ].shape[0],
-        "EAN|8001111111111 si abbina su altre fatture",
-    )
-    controlla(
-        "lato XML: la riga di sconto senza codice e' segnalata",
-        "SCONTO" in set(articoli["TipoChiave"]),
-        str(sorted(set(articoli["TipoChiave"]))),
-    )
-    controlla(
-        "lato carico: articolo mai incontrato nell'XML",
-        set(
-            articoli.loc[articoli["Origine"].eq("Carico"),
-                         "CodiceArticoloFornitore"]
-        ) == {"ART-003"},
-        str(articoli.loc[articoli["Origine"].eq("Carico"),
-                         "CodiceArticoloFornitore"].tolist()),
-    )
-    controlla(
-        "entrambe le descrizioni sono presenti come colonne",
-        {"DescrizioneXML", "DescrizioneCarico"} <= set(articoli.columns),
-        str(list(articoli.columns)),
-    )
-    controlla(
-        "descrizione XML valorizzata solo sul lato XML",
-        articoli.loc[articoli["Origine"].eq("Carico"),
-                     "DescrizioneXML"].isna().all()
-        and articoli.loc[articoli["Origine"].eq("XML"),
-                         "DescrizioneXML"].notna().all(),
-        str(articoli[["Origine", "DescrizioneXML"]].to_dict("records")),
-    )
-    controlla(
-        "descrizione carico valorizzata solo sul lato carico",
-        articoli.loc[articoli["Origine"].eq("XML"),
-                     "DescrizioneCarico"].isna().all()
-        and articoli.loc[articoli["Origine"].eq("Carico"),
-                         "DescrizioneCarico"].notna().all(),
-        str(articoli[["Origine", "DescrizioneCarico"]].to_dict("records")),
-    )
-    controlla(
-        "conteggio delle fatture presente e coerente",
-        {"Righe", "Fatture"} <= set(articoli.columns)
-        and int(articoli["Righe"].sum()) >= len(articoli),
-        str(articoli[["Righe", "Fatture"]].to_dict("records")),
-    )
-
-    percorso = Path(cartella_output) / "riconciliazione.xlsx"
-    if not percorso.exists():
-        return
-
-    fogli = openpyxl.load_workbook(percorso).sheetnames
-    controlla(
-        "foglio ArticoliNonAbbinati esportato",
-        "ArticoliNonAbbinati" in fogli,
-        str(fogli),
     )
 
 
@@ -987,6 +871,53 @@ def verifica_export(cartella_output, df_powerbi, namespace):
         .isna().all(),
         str(dataset[["Stato abbinamento", "CEAS"]].to_dict("records")),
     )
+    # differenza quantità sui valori assoluti: una nota di credito ha
+    # quantità negative e sottrarre i valori con segno darebbe 12
+    # invece di 0 (caso 00020: XML +3, carico -3)
+    nota = dataset.loc[dataset["Fattura"].eq("00020")]
+    riga_merce = nota.loc[nota["Stato abbinamento"].eq("Abbinato")]
+
+    controlla(
+        "Differenza quantità sui valori assoluti (3 contro -3 = 0)",
+        len(riga_merce) == 1
+        and riga_merce["Differenza quantità"].iloc[0] == 0,
+        str(riga_merce[[
+            "Quantità XML", "Quantità carico", "Differenza quantità",
+        ]].to_dict("records")),
+    )
+    controlla(
+        "le quantità mantengono il segno originale",
+        len(riga_merce) == 1
+        and riga_merce["Quantità XML"].iloc[0] == 3
+        and riga_merce["Quantità carico"].iloc[0] == -3,
+        str(riga_merce[["Quantità XML", "Quantità carico"]].to_dict("records")),
+    )
+
+    def differenza_attesa(colonna_xml, colonna_carico, assoluta):
+        sinistra = dataset[colonna_xml]
+        destra = dataset[colonna_carico]
+        if assoluta:
+            sinistra = sinistra.abs()
+            destra = destra.abs()
+        return sinistra - destra
+
+    controlla(
+        "Differenza quantità = |XML| - |carico| su tutte le righe",
+        dataset["Differenza quantità"].equals(
+            differenza_attesa("Quantità XML", "Quantità carico", True)
+        ),
+        str(dataset[["Quantità XML", "Quantità carico",
+                     "Differenza quantità"]].to_dict("records")),
+    )
+    controlla(
+        "Differenza totali resta con il segno (sottrazione semplice)",
+        dataset["Differenza totali"].equals(
+            differenza_attesa("Totale XML", "Totale Mersy", False)
+        ),
+        str(dataset[["Totale XML", "Totale Mersy",
+                     "Differenza totali"]].to_dict("records")),
+    )
+
     controlla(
         "CPCO valorizzato solo sulle righe con carico",
         dataset.loc[dataset["Stato abbinamento"].ne("Solo XML"), "CPCO"]
@@ -1046,11 +977,6 @@ def main():
     verifica_dizionario(namespace["dizionari"])
     verifica_regole_allineate(namespace)
     verifica_perimetro(namespace["df_fatture"])
-    verifica_articoli_non_abbinati(
-        namespace["df_articoli_non_abbinati"],
-        namespace["df_merge"],
-        namespace["_cartella_output"],
-    )
     verifica_export(
         namespace["_cartella_output"],
         namespace["df_powerbi"],

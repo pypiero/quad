@@ -73,9 +73,7 @@ il test si adegua da solo.
    `CampoCanonico` segnalato senza bloccare, regole disallineate fra i due fogli segnalate;
 10. **Dizionario** — regola non riconosciuta e chiave duplicata segnalate senza bloccare;
 11. **Perimetro e anagrafiche** — filtro `CDOCIAA`, precedenza `TDEC` su `CARF`, punti di consegna;
-12. **Articoli mai abbinati** — entrambi i lati nella stessa tabella, articoli abbinati altrove
-    esclusi, descrizioni XML e carico separate, foglio `ArticoliNonAbbinati` esportato;
-13. **Export** — file creati e tipo delle celle nell'xlsx (date, numeri, testo).
+12. **Export** — file creati e tipo delle celle nell'xlsx (date, numeri, testo).
 
 ## Provare il test contro un'altra versione del notebook
 

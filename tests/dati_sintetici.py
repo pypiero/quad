@@ -259,12 +259,14 @@ CARICHI = pd.DataFrame([
             CEAS="IT01111111111_00014",
             **{"Qtà": 1, "Importo_ns_fattura": 2.00, "PF02IAL": 2.00,
                "QTA ORDINE": 1, "QTA ACCETT": 1}),
-    # carico della nota di credito: tipo documento 60C
+    # carico della nota di credito: tipo documento 60C.
+    # La quantita' e' NEGATIVA mentre nell'XML e' positiva: e' il caso
+    # in cui la differenza deve valere 0 e non 6.
     _carico(CFOR="F001", NDOGIAA="00020", TDATIAA="2024-12-01",
             NDOGIAB="R/20", TDATIAB="2024-11-25", CART="C006",
             XART="RESO MERCE", CALA="ART-006", CUMF="KG",
             CEAS="IT01111111111_00020", CDOCIAA="60C",
-            **{"Qtà": 3, "Importo_ns_fattura": -6.00, "PF02IAL": -2.00,
+            **{"Qtà": -3, "Importo_ns_fattura": -6.00, "PF02IAL": -2.00,
                "QTA ORDINE": 3, "QTA ACCETT": 3}),
     # fuori perimetro: tipo documento diverso da 60I
     _carico(CFOR="F009", NDOGIAA="999", TDATIAA="2024-01-01",
