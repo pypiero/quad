@@ -755,8 +755,124 @@ def verifica_perimetro(df_fatture):
     )
 
 
+def verifica_articoli_non_abbinati(df_articoli_non_abbinati, df_merge,
+                                   cartella_output):
+    titolo(12, "ARTICOLI MAI ABBINATI (sezione [15-bis])")
+
+    print(df_articoli_non_abbinati.to_string(index=False))
+
+    articoli = df_articoli_non_abbinati
+
+    controlla(
+        "la tabella contiene entrambi i lati",
+        set(articoli["Origine"]) == {"XML", "Carico"},
+        str(sorted(set(articoli["Origine"]))),
+    )
+    # il controllo che conta: nessuna chiave di questa tabella deve
+    # avere anche una sola riga abbinata nel merge
+    abbinate_xml = set(
+        df_merge.loc[
+            df_merge["StatoAbbinamento"].eq("Abbinato"),
+            "ChiaveArticoloXML",
+        ].dropna()
+    )
+    abbinate_carico = set(
+        df_merge.loc[
+            df_merge["StatoAbbinamento"].eq("Abbinato"),
+            "mersy_articolo(CART)",
+        ].dropna()
+    )
+
+    controlla(
+        "nessuna chiave XML con abbinamenti nel merge",
+        not (
+            set(
+                articoli.loc[articoli["Origine"].eq("XML"),
+                             "ChiaveArticoloXML"]
+            ) & abbinate_xml
+        ),
+        str(sorted(
+            set(articoli.loc[articoli["Origine"].eq("XML"),
+                             "ChiaveArticoloXML"]) & abbinate_xml
+        )),
+    )
+    controlla(
+        "nessun CART con abbinamenti nel merge",
+        not (
+            set(
+                articoli.loc[articoli["Origine"].eq("Carico"),
+                             "CodiceArticoloCliente"]
+            ) & abbinate_carico
+        ),
+        str(sorted(
+            set(articoli.loc[articoli["Origine"].eq("Carico"),
+                             "CodiceArticoloCliente"]) & abbinate_carico
+        )),
+    )
+    controlla(
+        "un articolo abbinato altrove non finisce nell'elenco",
+        not articoli.loc[
+            articoli["Origine"].eq("XML")
+            & articoli["ChiaveArticoloXML"].eq("EAN|8001111111111")
+        ].shape[0],
+        "EAN|8001111111111 si abbina su altre fatture",
+    )
+    controlla(
+        "lato XML: la riga di sconto senza codice e' segnalata",
+        "SCONTO" in set(articoli["TipoChiave"]),
+        str(sorted(set(articoli["TipoChiave"]))),
+    )
+    controlla(
+        "lato carico: articolo mai incontrato nell'XML",
+        set(
+            articoli.loc[articoli["Origine"].eq("Carico"),
+                         "CodiceArticoloFornitore"]
+        ) == {"ART-003"},
+        str(articoli.loc[articoli["Origine"].eq("Carico"),
+                         "CodiceArticoloFornitore"].tolist()),
+    )
+    controlla(
+        "entrambe le descrizioni sono presenti come colonne",
+        {"DescrizioneXML", "DescrizioneCarico"} <= set(articoli.columns),
+        str(list(articoli.columns)),
+    )
+    controlla(
+        "descrizione XML valorizzata solo sul lato XML",
+        articoli.loc[articoli["Origine"].eq("Carico"),
+                     "DescrizioneXML"].isna().all()
+        and articoli.loc[articoli["Origine"].eq("XML"),
+                         "DescrizioneXML"].notna().all(),
+        str(articoli[["Origine", "DescrizioneXML"]].to_dict("records")),
+    )
+    controlla(
+        "descrizione carico valorizzata solo sul lato carico",
+        articoli.loc[articoli["Origine"].eq("XML"),
+                     "DescrizioneCarico"].isna().all()
+        and articoli.loc[articoli["Origine"].eq("Carico"),
+                         "DescrizioneCarico"].notna().all(),
+        str(articoli[["Origine", "DescrizioneCarico"]].to_dict("records")),
+    )
+    controlla(
+        "conteggio delle fatture presente e coerente",
+        {"Righe", "Fatture"} <= set(articoli.columns)
+        and int(articoli["Righe"].sum()) >= len(articoli),
+        str(articoli[["Righe", "Fatture"]].to_dict("records")),
+    )
+
+    percorso = Path(cartella_output) / "riconciliazione.xlsx"
+    if not percorso.exists():
+        return
+
+    fogli = openpyxl.load_workbook(percorso).sheetnames
+    controlla(
+        "foglio ArticoliNonAbbinati esportato",
+        "ArticoliNonAbbinati" in fogli,
+        str(fogli),
+    )
+
+
 def verifica_export(cartella_output, df_powerbi, namespace):
-    titolo(12, "EXPORT E TIPI DELLE CELLE (celle [16])")
+    titolo(13, "EXPORT E TIPI DELLE CELLE (celle [16])")
 
     for nome in ("riconciliazione.xlsx", "riconciliazione_powerbi.xlsx"):
         controlla(
@@ -891,7 +1007,7 @@ def verifica_export(cartella_output, df_powerbi, namespace):
 
 
 def stampa_riepilogo():
-    titolo(13, "RIEPILOGO")
+    titolo(14, "RIEPILOGO")
 
     for nome, esito, dettaglio in ESITI:
         riga = ("PASS  " if esito else "FAIL  ") + nome
@@ -930,6 +1046,11 @@ def main():
     verifica_dizionario(namespace["dizionari"])
     verifica_regole_allineate(namespace)
     verifica_perimetro(namespace["df_fatture"])
+    verifica_articoli_non_abbinati(
+        namespace["df_articoli_non_abbinati"],
+        namespace["df_merge"],
+        namespace["_cartella_output"],
+    )
     verifica_export(
         namespace["_cartella_output"],
         namespace["df_powerbi"],

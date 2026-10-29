@@ -288,7 +288,7 @@ riga va guardata a mano.
 
 ### `export/riconciliazione.xlsx` — diagnostica
 
-Sei fogli, uno per tabella:
+Sei fogli, uno per tabella, più uno opzionale:
 
 | Foglio | Contenuto |
 |---|---|
@@ -298,6 +298,31 @@ Sei fogli, uno per tabella:
 | `df_fatture` | lato carichi nel perimetro |
 | `df_xml_fatture` | lato XML, una riga per linea |
 | `df_xml_codici_articolo` | lato XML, una riga per codice |
+| `ArticoliNonAbbinati` | **opzionale**, vedi sotto |
+
+### `ArticoliNonAbbinati` — articoli mai riconciliati
+
+Arriva dalla sezione `[15-bis]`, un blocco **autonomo e rimovibile** in fondo alla prima cella: se lo
+cancelli, il foglio semplicemente non viene creato e il resto funziona lo stesso.
+
+Contiene gli articoli che non si sono agganciati **nemmeno una volta**. L'unità è l'articolo, non la
+riga: un articolo che si abbina in una fattura e non in un'altra non è "mai abbinato" e viene
+escluso. Per questo si contano prima le righe abbinate di tutto il perimetro, poi si tengono solo
+quelle con zero.
+
+| Colonna | Significato |
+|---|---|
+| `Origine` | `XML` oppure `Carico` |
+| `CFOR`, `Denominazione` | fornitore |
+| `CodiceArticoloCliente` / `CodiceArticoloFornitore` / `EAN` | i codici dell'articolo |
+| `DescrizioneXML` | descrizione dall'XML (vuota sul lato carico) |
+| `DescrizioneCarico` | descrizione da Mersy (vuota sul lato XML) |
+| `TipoChiave` | `EAN` / `CART` / `CALA` / `SCONTO` / `RIGA DESCRITTIVA` / `CARICO` — serve a distinguere un articolo vero da una riga senza codice (sconto, riga descrittiva) |
+| `ChiaveArticoloXML` | la chiave su cui è raggruppato (lato carico: `CART|…`) |
+| `Righe`, `Fatture` | quante righe e quante fatture distinte riguardano l'articolo |
+
+Il lato carichi è raggruppato sul **codice articolo interno** (`CART`), la chiave più stabile
+disponibile, perché per una riga mai abbinata non si sa quale codice avrebbe usato l'XML.
 
 ### `export/riconciliazione_powerbi.xlsx` — dataset per il report
 

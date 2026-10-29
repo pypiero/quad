@@ -166,6 +166,7 @@ partenza, perché è da lì che il report prende i codici da mostrare.
 | `map_ddt` | coppia DDT XML ↔ DDT carico | [14] |
 | `df_merge` | riga riconciliata (XML, carico o entrambe) | [15] |
 | `df_powerbi` | come `df_merge`, 26 colonne | blocco finale |
+| `df_articoli_non_abbinati` | articoli mai riconciliati, i due lati insieme | [15-bis] (opzionale) |
 
 **Questo è il punto più importante da capire**: i due lati arrivano al merge con granularità
 diverse. L'XML parte da *linee* e arriva ad *articoli*; i carichi partono già da *articoli*. Se le
@@ -691,6 +692,23 @@ permette di risalire a ogni passaggio.
 
 La seconda cella del notebook costruisce `df_powerbi` e lo salva in
 `export/riconciliazione_powerbi.xlsx` (un foglio, 26 colonne).
+
+Prima dell'esportazione c'è la sezione **[15-bis]**, un blocco **opzionale e rimovibile** che produce
+`df_articoli_non_abbinati`: gli articoli che non si sono agganciati nemmeno una volta, dai due lati in
+una sola tabella (colonna `Origine`). Si regge su una distinzione che vale la pena tenere a mente:
+
+- **riga non abbinata ≠ articolo mai abbinato.** `EAN|8001111111111` compare su quattro fatture; su
+  due si abbina e su due no. Non è un articolo "mai abbinato" e non deve finire nell'elenco, altrimenti
+  lo strumento segnala rumore invece di problemi;
+- il raggruppamento è per articolo **dentro il fornitore** (`CFOR + ChiaveArticoloXML` sul lato XML,
+  `CFOR + CART` sul lato carichi), perché lo stesso codice può esistere presso fornitori diversi;
+- il lato carichi usa il codice interno `CART`: per una riga mai abbinata non si sa quale codice
+  avrebbe usato l'XML, quindi si sceglie la chiave più stabile;
+- `TipoChiave` separa gli articoli veri dalle righe senza codice (`SCONTO`, `RIGA DESCRITTIVA`), che
+  altrimenti riempirebbero l'elenco: non sono articoli mancanti, sono righe che non hanno un codice.
+
+La sezione non alimenta nulla a valle: la [16] la esporta come foglio `ArticoliNonAbbinati` **solo se
+la variabile esiste**, quindi cancellare il blocco non rompe niente.
 
 ### 6.1 `coalesce_colonne`
 
