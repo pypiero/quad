@@ -241,19 +241,19 @@ def verifica_merge(df_merge):
         "Senza DDT" in set(df_merge["NumeroDDT_Comune"]),
     )
     controlla(
-        "merge senza duplicati (16 righe)",
-        len(df_merge) == 16,
+        "merge senza duplicati (18 righe)",
+        len(df_merge) == 18,
         str(len(df_merge)),
     )
     controlla(
         "ogni riga XML compare una volta sola",
-        int(df_merge["ID_Riga_XML"].notna().sum()) == 12
+        int(df_merge["ID_Riga_XML"].notna().sum()) == 14
         and df_merge["ID_Riga_XML"].dropna().is_unique,
         str(int(df_merge["ID_Riga_XML"].notna().sum())),
     )
     controlla(
         "ogni riga carico compare una volta sola",
-        int(df_merge["Indice"].notna().sum()) == 11
+        int(df_merge["Indice"].notna().sum()) == 12
         and df_merge["Indice"].dropna().is_unique,
         str(int(df_merge["Indice"].notna().sum())),
     )
@@ -713,7 +713,7 @@ def verifica_perimetro(df_fatture):
 
     controlla(
         "filtro CDOCIAA: 60I e 60C nel perimetro",
-        len(df_fatture) == 11,
+        len(df_fatture) == 12,
         f"righe nel perimetro: {len(df_fatture)}",
     )
     controlla(
@@ -755,8 +755,73 @@ def verifica_perimetro(df_fatture):
     )
 
 
+def verifica_descrizione_codice(df_xml_codici_articolo):
+    titolo(13, "DESCRIZIONE COME CODICE E TIPI CODIFICATI (celle [3] e [12])")
+
+    print(mostra(df_xml_codici_articolo[
+        ["CFOR_XML", "CodiceTipoXML", "CodiceValoreXML",
+         "CampoCanonico", "CodiceValoreNormalizzato"]
+    ]))
+
+    descrizioni = df_xml_codici_articolo.loc[
+        df_xml_codici_articolo["CodiceTipoXML"] == "Descrizione"
+    ]
+
+    # dropna: sui dati rotti il CFOR può mancare e sorted() non
+    # accetta i valori NA
+    fornitori_descrizione = sorted(set(descrizioni["CFOR_XML"].dropna()))
+
+    tipi_presenti = set(df_xml_codici_articolo["CodiceTipoXML"].dropna())
+
+    valori_presenti = set(
+        df_xml_codici_articolo["CodiceValoreNormalizzato"].dropna()
+    )
+
+    controlla(
+        "la descrizione di F005 diventa un codice articolo",
+        len(descrizioni) == 1
+        and descrizioni["CodiceValoreNormalizzato"].iloc[0] == "ART222",
+        mostra(descrizioni),
+    )
+
+    controlla(
+        "la descrizione vale solo per il fornitore che la codifica",
+        fornitori_descrizione == ["F005"],
+        str(fornitori_descrizione),
+    )
+
+    controlla(
+        "nessuna descrizione sulle linee che hanno gia' un codice",
+        df_xml_codici_articolo.loc[
+            df_xml_codici_articolo["ChiaveRigaXML"] == 14,
+            "CodiceTipoXML",
+        ].tolist() == ["FORN"],
+        str(df_xml_codici_articolo.loc[
+            df_xml_codici_articolo["ChiaveRigaXML"] == 14,
+            "CodiceTipoXML",
+        ].tolist()),
+    )
+
+    controlla(
+        "tipo non codificato escluso dalla tabella dei codici",
+        "XYZ" not in tipi_presenti,
+        str(sorted(tipi_presenti)),
+    )
+
+    controlla(
+        "ogni codice rimasto ha un campo canonico",
+        df_xml_codici_articolo["CampoCanonico"].notna().all(),
+        str(int(df_xml_codici_articolo["CampoCanonico"].isna().sum())),
+    )
+
+    controlla(
+        "il valore del tipo escluso non compare nei codici",
+        "SCONTO-9" not in valori_presenti,
+    )
+
+
 def verifica_export(cartella_output, df_powerbi, namespace):
-    titolo(13, "EXPORT E TIPI DELLE CELLE (celle [16])")
+    titolo(14, "EXPORT E TIPI DELLE CELLE (celle [16])")
 
     for nome in ("riconciliazione.xlsx", "riconciliazione_powerbi.xlsx"):
         controlla(
@@ -938,7 +1003,7 @@ def verifica_export(cartella_output, df_powerbi, namespace):
 
 
 def stampa_riepilogo():
-    titolo(14, "RIEPILOGO")
+    titolo(15, "RIEPILOGO")
 
     for nome, esito, dettaglio in ESITI:
         riga = ("PASS  " if esito else "FAIL  ") + nome
@@ -977,6 +1042,7 @@ def main():
     verifica_dizionario(namespace["dizionari"])
     verifica_regole_allineate(namespace)
     verifica_perimetro(namespace["df_fatture"])
+    verifica_descrizione_codice(namespace["df_xml_codici_articolo"])
     verifica_export(
         namespace["_cartella_output"],
         namespace["df_powerbi"],

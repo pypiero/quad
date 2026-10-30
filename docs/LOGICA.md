@@ -284,6 +284,14 @@ descrizione, quantità, unità di misura, prezzo unitario, prezzo totale, riferi
 Per ogni `CodiceArticolo` produce una riga in formato **lungo** (`CodiceTipoXML`, `CodiceValoreXML`),
 più una riga aggiuntiva per `RiferimentoAmministrazione`, trattato come tipo virtuale.
 
+Sulle linee **prive di qualsiasi altro codice** viene aggiunta anche la `Descrizione`, come tipo
+virtuale `Descrizione`. Serve ai fornitori che scrivono il codice articolo dentro il testo e non in un
+`CodiceArticolo`: la regola del dizionario (`ESTRAI_ULTIMA_STRINGA`, `ESTRAI_PRIMA_STRINGA`, …) decide
+quale parte della descrizione diventa il codice. La riga **non** viene aggiunta quando la linea ha già
+un codice o un `RiferimentoAmministrazione`: finirebbe nello stesso campo canonico del codice vero e
+nel report comparirebbe al suo posto. Come ogni altro tipo, resta inerte finché il dizionario non la
+codifica.
+
 Alla fine: conversione dei tipi (`DataFattura` e `DataDDT` a data, campi numerici a numero con
 `errors="coerce"`) e ordinamento stabile.
 
@@ -505,8 +513,15 @@ quindi non può entrare nei livelli successivi che ragionano per fornitore.
 La normalizzazione avviene sulle **terne distinte** `(CFOR, CodiceTipoXML, CodiceValoreXML)`, non su
 ogni riga: stesso valore, stesso risultato, meno lavoro.
 
-Se il tipo non è mappato, `CampoCanonico` resta vuoto ma il valore viene comunque normalizzato con la
-regola di default: non si perde il dato, semplicemente non finisce in una colonna canonica (vedi [13]).
+**Filtro dei tipi codificati.** Alla fine della cella restano solo i codici la cui coppia
+`(CFOR, CodiceTipoXML)` compare nel foglio `RegoleCodiciXML`. Un tipo non codificato non avrebbe
+comunque contribuito alla chiave articolo: sarebbe finito in una colonna `NON_MAPPATO|tipo`, che la
+gerarchia non guarda. Il conteggio degli esclusi viene stampato **prima** del filtro, perché dopo non
+sarebbe più ricavabile.
+
+È questa la ragione per cui un tipo nuovo — compresi i virtuali `RiferimentoAmministrazione` e
+`Descrizione` costruiti dalla cella `[3]` — si abilita con una riga nell'Excel e non con una modifica
+al codice.
 
 ### [13] Righe aggregate (`df_xml_righe`)
 
@@ -522,7 +537,8 @@ spese accessorie, premi) **sparirebbero** dal pivot.
 ```
 tipo == __NESSUN_CODICE          → __NESSUN_CODICE
 CampoCanonico presente           → quel campo (EAN / CODICE_FORNITORE / CODICE_CLIENTE)
-CampoCanonico vuoto (non mappato)→ NON_MAPPATO|tipo   (una colonna per tipo)
+CampoCanonico vuoto (non mappato)→ NON_MAPPATO|tipo   (rete di sicurezza: dopo il
+                                                       filtro di [12] non arriva più nulla)
 ```
 
 **Passo 3 — pivot.** Per ogni coppia `(linea, campo)` si tiene il **primo valore non nullo** in ordine
@@ -796,8 +812,8 @@ Ogni riga di `df_merge` ha quattro indicatori. La combinazione racconta la stori
 | `Solo carico` | riga solo carico | — |
 
 **Combinazione tipica da cercare**: `Solo XML` + `Documento trovato` significa "il trasporto è
-registrato ma la riga articolo non si è agganciata": quasi sempre un codice articolo non mappato o
-una quantità su un'altra riga.
+registrato ma la riga articolo non si è agganciata": quasi sempre un codice articolo non codificato
+nel dizionario, o una quantità su un'altra riga.
 
 ---
 
@@ -850,7 +866,7 @@ Parti sempre dal sintomo.
 | una riga è `Solo XML` con `DDT non corrispondente` | [14] e [10]-[11] | la chiave DDT: aggiungi/correggi una regola in `RegoleDDT` |
 | una riga è `Solo carico` | [15] | `Indice` mai raggiunto: la riga XML esiste ma con DDT o codice diverso |
 | differenze quantità a zero ma prezzi diversi | report | il match è avvenuto sull'articolo giusto ma su un'altra riga di carico (vince l'`Indice` più basso) |
-| stesso articolo due volte | [13] | `ChiaveArticoloXML` diversa: uno dei due codici non è mappato e finisce in una colonna `NON_MAPPATO\|tipo` |
+| stesso articolo due volte | [12] | `ChiaveArticoloXML` diversa: uno dei due tipi di codice non è nel dizionario e viene scartato, oppure punta a un altro campo canonico |
 | colonna del report vuota | blocco finale | guarda la catena del `coalesce` per quella colonna |
 | regola ignorata | [6] | `Anomalie`: `NON RICONOSCIUTA` |
 | `IndexError`/`ValueError` in [13] | [13] | colonna sia chiave sia output; `DataDDT` è il caso già noto |
@@ -874,8 +890,9 @@ cui intervenire.
   sono lette e portate nel merge, ma non usate nelle regole;
 - **non estrae `AliquotaIVA`** né `CodiceFiscale` di linea: se servissero, la sezione [13] li
   aggregherebbe da sola una volta presenti in `df_xml_fatture`;
-- **tratta `RiferimentoAmministrazione`** come un normale codice articolo (tipo virtuale): un
-  trattamento dedicato è una decisione ancora aperta;
+- **tratta `RiferimentoAmministrazione` e `Descrizione`** come normali codici articolo: sono tipi
+  virtuali e si attivano solo se il dizionario li codifica per quel fornitore. Un trattamento
+  dedicato è una decisione ancora aperta;
 - **non è incrementale**: ricalcola tutto a ogni esecuzione. Non c'è memoria fra un run e l'altro, e
   `Indice` non è stabile se cambia il perimetro.
 

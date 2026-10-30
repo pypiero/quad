@@ -123,12 +123,12 @@ lato carico sono configurati separatamente perché hanno granularità diverse.
 |---|---|---|
 | `RegoleCodiciXML` | `CFOR` + `CodiceTipoXML` | → `CampoCanonico`, `RegolaNormalizzazione` |
 | `RegoleCodiciCarico` | `CFOR` + `CampoCanonico` | → `RegolaNormalizzazione` |
+| `RegoleDDT` | `CFOR` | → `RegolaDDTXML`, `RegolaDDTCarico` |
 
 Nel foglio `RegoleCodiciCarico` la colonna `CampoCanonico` deve contenere **esattamente** `EAN`,
 `CODICE_CLIENTE` o `CODICE_FORNITORE` (gli stessi nomi usati in `RegoleCodiciXML`); un valore
 diverso — per esempio `CODICE_FORNTORE` — non viene applicato e il notebook lo segnala a runtime
 nella sezione `[10]`.
-| `RegoleDDT` | `CFOR` | → `RegolaDDTXML`, `RegolaDDTCarico` |
 
 Regole disponibili (le stesse per DDT e codici articolo):
 
@@ -149,6 +149,53 @@ Le regole sono definite in **un unico registro** nella sezione `[4]`: ogni voce 
 funzione e a una descrizione, e la tabella viene stampata a runtime insieme al default. Per
 aggiungere o modificare una regola si tocca solo quel blocco — `normalizza()` e la diagnostica lo
 leggono da soli. Prima servivano tre modifiche in due punti diversi.
+
+### Un tipo di codice conta solo se è nel dizionario
+
+Nel foglio `RegoleCodiciXML` finisce solo ciò che il dizionario codifica: un `CodiceTipoXML` che non
+compare per quel `CFOR` viene **scartato** dalla tabella dei codici (sezione `[12]`). Non è una
+perdita di informazione — un tipo non codificato non avrebbe comunque contribuito alla chiave
+articolo — ma libera il foglio `df_xml_codici_articolo` e i conteggi da tutto ciò che non è
+configurato.
+
+Il numero di codici esclusi viene stampato **prima** del filtro, perché dopo non sarebbe più
+calcolabile.
+
+La conseguenza pratica è che un tipo nuovo si abilita **solo con una riga nell'Excel**, senza
+toccare il codice. Vale anche per i tipi virtuali che il notebook costruisce da solo: oggi
+`RiferimentoAmministrazione` e `Descrizione`.
+
+### La descrizione come codice articolo
+
+Alcuni fornitori non mandano alcun `CodiceArticolo`: il codice articolo è scritto dentro la
+`Descrizione`, come prima o come ultima parola. Per loro la sezione `[3]` propone un codice di tipo
+virtuale `Descrizione`, con il testo della descrizione come valore.
+
+Non si attiva da solo. Per usarlo serve **una riga** nel foglio `RegoleCodiciXML` per quel fornitore,
+per esempio:
+
+| `CFOR` | `CodiceTipoXML` | `CampoCanonico` | `RegolaNormalizzazione` |
+|---|---|---|---|
+| `F005` | `Descrizione` | `CODICE_FORNITORE` | `ESTRAI_ULTIMA_STRINGA` |
+| `F005` | `FORN` | `CODICE_FORNITORE` | `RIMUOVI_SEPARATORI` |
+
+Da lì in poi la descrizione segue lo stesso percorso di qualunque altro codice: normalizzazione,
+pivot, `ChiaveArticoloXML`, lookup `CALA`, report.
+
+Tre cose da tenere presenti:
+
+- **la riga si aggiunge solo alle linee prive di qualsiasi altro codice.** Su una linea già
+  codificata il frammento di descrizione finirebbe nello stesso campo canonico del codice vero e nel
+  report comparirebbe al suo posto (una linea con codice cliente `C002` e descrizione `BURRO`
+  mostrerebbe `Codice Art. Fornitore = BURRO`);
+- **va abilitata fornitore per fornitore.** `ESTRAI_ULTIMA_STRINGA` su una descrizione normale
+  produce risultati inattesi: `PANE INTEGRALE` → `INTEGRALE`, `SCONTO FEDELTA` → `FEDELTA`;
+- **`ESTRAI_ULTIMA_STRINGA` taglia anche sui trattini.** Un codice `ART-222` scritto in coda alla
+  descrizione diventa `222`, perché il trattino conta come separatore. Se il codice del fornitore
+  contiene separatori conviene usare `SOLO_NUMERI` o `RIMUOVI_SEPARATORI` sulla descrizione intera.
+
+Una riga che resta senza codice continua a finire in `ChiaveArticoloXML` come `RIGA DESCRITTIVA|n` o
+con la natura (`SCONTO|n`): la descrizione non toglie mai la rete di sicurezza.
 
 Una regola scritta male o una cella vuota **non bloccano** l'esecuzione: si applica `RIMUOVI_SEPARATORI` e
 l'anomalia viene elencata nella diagnostica della sezione `[6]` (regole non riconosciute, chiavi
@@ -220,9 +267,11 @@ presente nei carichi), `DDT_UNICO_CARICO` e `DDT_AMBIGUO`, oltre a `NESSUNA_CHIA
 ### 5.2 Articolo (sezioni 10 e 15)
 
 Il confronto avviene **su valori normalizzati da entrambi i lati**: l'XML passa dal dizionario
-(`RegoleCodiciXML`), i carichi dal foglio `RegoleCodiciCarico`. Le colonne originali restano intatte
-(il report mostra i codici reali); il confronto usa invece `CEAN_Chiave`, `CART_Chiave`,
-`CALA_Chiave` sul lato carichi e i valori normalizzati sul lato XML.
+(`RegoleCodiciXML`), i carichi dal foglio `RegoleCodiciCarico`. Le colonne originali dei carichi
+restano intatte; sul lato XML le colonne dei codici del report contengono il valore **normalizzato**
+(quindi maiuscolo, senza separatori: l'XML con `art-002` arriva nel report come `ART-002`). Il valore
+grezzo resta nel foglio diagnostico `df_xml_codici_articolo`. Il confronto usa `CEAN_Chiave`,
+`CART_Chiave`, `CALA_Chiave` sul lato carichi e i valori normalizzati sul lato XML.
 
 Per ogni riga XML si cercano le righe carico compatibili con una cascata di tre livelli:
 
@@ -388,8 +437,9 @@ Dettagli in [`tests/README.md`](tests/README.md).
   fornitore, che in quel caso manca. Il caso è oggi considerato non significativo — si assume che
   ogni fattura abbia almeno un carico — ma è documentato nella cella del report insieme alle
   possibili strade, se in futuro non fosse più vero.
-- `RiferimentoAmministrazione` viene trattato come un normale `CodiceArticolo` (tipo virtuale
-  `RiferimentoAmministrazione`). Un eventuale trattamento dedicato va deciso.
+- `RiferimentoAmministrazione` e `Descrizione` sono tipi virtuali trattati come normali
+  `CodiceArticolo`: partecipano solo se il dizionario li codifica per quel fornitore. Un
+  trattamento dedicato va deciso.
 - Se una fattura risulta associata a più `CFOR` il notebook lo segnala e tiene il primo in ordine
   alfabetico (sezione `[11]`).
 - La numerazione `Indice` è progressiva **dopo** i filtri: non è stabile fra esecuzioni diverse se
