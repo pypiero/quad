@@ -172,6 +172,21 @@ XML_FILES = {
             linea(2, "SCONTO RESO", 1, -1.00, -1.00, natura="SC"),
         ]),
     ),
+    # F005: nessun CodiceArticolo sulla prima linea, il codice e'
+    # scritto in coda alla descrizione (regola ESTRAI_ULTIMA_STRINGA).
+    # La seconda linea ha un codice vero e un tipo XYZ che il
+    # dizionario non codifica: la descrizione NON deve aggiungersi
+    # (altrimenti "INTEGRALE" finirebbe nel campo del codice
+    # fornitore) e XYZ deve sparire dalla tabella dei codici.
+    "IT06666666666_00030.xml": xml_documento(
+        "00030", "2024-12-15",
+        ddt("G/30", "2024-12-10", [1, 2]),
+        "".join([
+            linea(1, "RICOTTA GR 500 ART222", 3, 4.00, 12.00, "KG"),
+            linea(2, "PANE INTEGRALE", 1, 2.00, 2.00, "KG",
+                  codici=[("FORN", "ART-001"), ("XYZ", "SCONTO-9")]),
+        ]),
+    ),
     # Non FPR12: va scartato in lettura.
     "IT04444444444_00011.xml": xml_documento(
         "11", "2024-05-02", "",
@@ -259,12 +274,23 @@ CARICHI = pd.DataFrame([
             CEAS="IT01111111111_00014",
             **{"Qtà": 1, "Importo_ns_fattura": 2.00, "PF02IAL": 2.00,
                "QTA ORDINE": 1, "QTA ACCETT": 1}),
-    # carico della nota di credito: tipo documento 60C
+    # carico della nota di credito: tipo documento 60C.
+    # La quantita' e' NEGATIVA mentre nell'XML e' positiva: e' il caso
+    # in cui la differenza deve valere 0 e non 6.
     _carico(CFOR="F001", NDOGIAA="00020", TDATIAA="2024-12-01",
             NDOGIAB="R/20", TDATIAB="2024-11-25", CART="C006",
             XART="RESO MERCE", CALA="ART-006", CUMF="KG",
             CEAS="IT01111111111_00020", CDOCIAA="60C",
-            **{"Qtà": 3, "Importo_ns_fattura": -6.00, "PF02IAL": -2.00,
+            **{"Qtà": -3, "Importo_ns_fattura": -6.00, "PF02IAL": -2.00,
+               "QTA ORDINE": 3, "QTA ACCETT": 3}),
+    # carico F005: il codice articolo esiste solo nella descrizione
+    # dell'XML. CALA porta lo stesso valore con un separatore, che
+    # RIMUOVI_SEPARATORI elimina su entrambi i lati.
+    _carico(CFOR="F005", NDOGIAA="00030", TDATIAA="2024-12-15",
+            NDOGIAB="G-30", TDATIAB="2024-12-10", CART="C007",
+            XART="RICOTTA GR 500 ART222", CALA="ART-222", CUMF="KG",
+            CEAS="IT06666666666_00030",
+            **{"Qtà": 3, "Importo_ns_fattura": 12.00, "PF02IAL": 4.00,
                "QTA ORDINE": 3, "QTA ACCETT": 3}),
     # fuori perimetro: tipo documento diverso da 60I
     _carico(CFOR="F009", NDOGIAA="999", TDATIAA="2024-01-01",
@@ -291,6 +317,7 @@ EAN = pd.DataFrame([
     {"CART": "C004", "SBAR": "EAN", "CEAN": "8004444444444"},
     {"CART": "C005", "SBAR": "EAN", "CEAN": "8005555555555"},
     {"CART": "C006", "SBAR": "EAN", "CEAN": "8006666666666"},
+    {"CART": "C007", "SBAR": "EAN", "CEAN": "8007777777777"},
 ])
 
 CARF = pd.DataFrame([
@@ -309,6 +336,8 @@ CARF = pd.DataFrame([
      "CARF": "ART/002", "XARF": "RICOTTA"},
     {"CART": "C006", "CFOR": "F001", "TDEC": "2024-01-01",
      "CARF": "ART-006", "XARF": "RESO"},
+    {"CART": "C007", "CFOR": "F005", "TDEC": "2024-01-01",
+     "CARF": "ART-222", "XARF": "RICOTTA GR 500"},
 ])
 
 
@@ -336,6 +365,14 @@ DIZIONARIO = {
         {"CFOR": "F003", "Denominazione": "tre", "CodiceTipoXML": "FORN",
          "CampoCanonico": "CODICE_FORNITORE",
          "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
+        # F005: il codice articolo sta in coda alla descrizione.
+        {"CFOR": "F005", "Denominazione": "cinque", "CodiceTipoXML": "FORN",
+         "CampoCanonico": "CODICE_FORNITORE",
+         "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
+        {"CFOR": "F005", "Denominazione": "cinque",
+         "CodiceTipoXML": "Descrizione",
+         "CampoCanonico": "CODICE_FORNITORE",
+         "RegolaNormalizzazione": "ESTRAI_ULTIMA_STRINGA"},
         # F009: regola presente solo sul lato XML. Il lato carichi non
         # ha la riga e ricade sul default, quindi le due chiavi non
         # coincidono: la diagnostica deve segnalarlo.
@@ -361,6 +398,9 @@ DIZIONARIO = {
         {"CFOR": "F003", "Denominazione": "tre",
          "CampoCanonico": "CODICE_FORNITORE",
          "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
+        {"CFOR": "F005", "Denominazione": "cinque",
+         "CampoCanonico": "CODICE_FORNITORE",
+         "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
         # refuso voluto: CODICE_FORNTORE invece di CODICE_FORNITORE.
         # La regola non deve essere applicata, ma il campo va segnalato.
         {"CFOR": "F003", "Denominazione": "tre",
@@ -373,5 +413,8 @@ DIZIONARIO = {
         {"CFOR": "F002", "Denominazione": "due",
          "RegolaDDTXML": "NESSUNA_REGOLA",
          "RegolaDDTCarico": "NESSUNA_REGOLA"},
+        {"CFOR": "F005", "Denominazione": "cinque",
+         "RegolaDDTXML": "RIMUOVI_SEPARATORI",
+         "RegolaDDTCarico": "RIMUOVI_SEPARATORI"},
     ]),
 }
