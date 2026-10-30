@@ -169,15 +169,16 @@ toccare il codice. Vale anche per i tipi virtuali che il notebook costruisce da 
 
 Alcuni fornitori scrivono il codice articolo dentro la `Descrizione` invece che in un
 `CodiceArticolo`, come prima o come ultima parola: `1234 melatonina in compresse 1mg` con codice
-cliente `1234`. Per loro la sezione `[12]` propone un codice di tipo virtuale `Descrizione`, con il
-testo della descrizione come valore.
+cliente `1234`. Per loro la sezione `[3]` produce un codice di tipo virtuale `Descrizione`, con il
+testo della descrizione come valore, **su ogni linea** e senza nessuna condizione — esattamente come
+`RiferimentoAmministrazione`.
 
-Il punto in cui viene costruito non è casuale: la sezione `[12]` è la prima in cui il dizionario è
-già stato letto, e servono entrambe le informazioni — il tipo codificato per quel `CFOR` e
-l'assenza di altri codici utilizzabili sulla linea.
+È il dizionario a decidere: se il tipo `Descrizione` non è codificato per quel `CFOR`, il codice
+viene scartato dal filtro dei tipi come qualunque altro tipo sconosciuto. Il notebook non fa
+eccezioni né controlli preliminari sulla descrizione.
 
-Non si attiva da solo. Per usarlo serve **una riga** nel foglio `RegoleCodiciXML` per quel fornitore,
-per esempio:
+Non si attiva da solo, ma non per una condizione nel codice: serve **una riga** nel foglio
+`RegoleCodiciXML` per quel fornitore, per esempio:
 
 | `CFOR` | `CodiceTipoXML` | `CampoCanonico` | `RegolaNormalizzazione` |
 |---|---|---|---|
@@ -187,14 +188,23 @@ per esempio:
 Da lì in poi la descrizione segue lo stesso percorso di qualunque altro codice: normalizzazione,
 pivot, `ChiaveArticoloXML`, lookup `CALA`, report.
 
-Tre cose da tenere presenti:
+Quattro cose da tenere presenti:
 
-- **la riga si aggiunge solo alle linee senza nessun codice *codificato*.** Un `CodiceArticolo` di
-  un tipo che il dizionario non conosce non conta: viene scartato comunque, quindi la descrizione
-  resta l'unico appiglio (è il caso di `MINSAN`). Su una linea con un codice vero, invece, il
-  frammento di descrizione finirebbe nello stesso campo canonico e nel report comparirebbe al suo
-  posto: una linea con codice cliente `C002` e descrizione `BURRO` mostrerebbe
-  `Codice Art. Fornitore = BURRO`;
+- **un codice vero vince sempre, nello stesso campo.** Il progressivo della descrizione è sempre
+  l'ultimo della linea, e nel pivot, a parità di campo canonico, vince il progressivo più basso. Se
+  una linea ha `FORN = ART-001` e descrizione `PANE INTEGRALE`, entrambi puntano a
+  `CODICE_FORNITORE`: il report mostra `ART-001`;
+- **negli altri campi la descrizione occupa quello che trova libero.** Su una linea con il solo
+  codice cliente `C002` e descrizione `BURRO`, mappata su `CODICE_FORNITORE`, il report mostra
+  `Codice Art. Fornitore = BURRO`. È un comportamento accettato: se il campo è vuoto e il
+  dizionario dice che quel campo si ricava dalla descrizione, il valore viene usato;
+- **la descrizione entra nella gerarchia alla pari degli altri codici.** Se è mappata su
+  `CODICE_CLIENTE` e la linea ha solo un codice fornitore, il `CART` ricavato dalla descrizione
+  vince sul `FORN` nella chiave articolo, perché `EAN → CART → FORN` è l'ordine della gerarchia.
+  Un valore sbagliato estratto dalla descrizione può quindi oscurare un codice fornitore corretto.
+  Per non avere il problema: mappare la descrizione su `CODICE_FORNITORE`, oppure usarla solo sui
+  fornitori che non mandano nessun `CodiceArticolo`;
+- 
 - **va abilitata fornitore per fornitore.** `ESTRAI_ULTIMA_STRINGA` su una descrizione normale
   produce risultati inattesi: `PANE INTEGRALE` → `INTEGRALE`, `SCONTO FEDELTA` → `FEDELTA`;
 - **`ESTRAI_ULTIMA_STRINGA` taglia anche sui trattini.** Un codice `ART-222` scritto in coda alla
