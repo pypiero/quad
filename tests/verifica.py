@@ -241,19 +241,19 @@ def verifica_merge(df_merge):
         "Senza DDT" in set(df_merge["NumeroDDT_Comune"]),
     )
     controlla(
-        "merge senza duplicati (18 righe)",
-        len(df_merge) == 18,
+        "merge senza duplicati (19 righe)",
+        len(df_merge) == 19,
         str(len(df_merge)),
     )
     controlla(
         "ogni riga XML compare una volta sola",
-        int(df_merge["ID_Riga_XML"].notna().sum()) == 14
+        int(df_merge["ID_Riga_XML"].notna().sum()) == 15
         and df_merge["ID_Riga_XML"].dropna().is_unique,
         str(int(df_merge["ID_Riga_XML"].notna().sum())),
     )
     controlla(
         "ogni riga carico compare una volta sola",
-        int(df_merge["Indice"].notna().sum()) == 12
+        int(df_merge["Indice"].notna().sum()) == 13
         and df_merge["Indice"].dropna().is_unique,
         str(int(df_merge["Indice"].notna().sum())),
     )
@@ -713,7 +713,7 @@ def verifica_perimetro(df_fatture):
 
     controlla(
         "filtro CDOCIAA: 60I e 60C nel perimetro",
-        len(df_fatture) == 12,
+        len(df_fatture) == 13,
         f"righe nel perimetro: {len(df_fatture)}",
     )
     controlla(
@@ -755,8 +755,9 @@ def verifica_perimetro(df_fatture):
     )
 
 
-def verifica_descrizione_codice(df_xml_codici_articolo):
-    titolo(13, "DESCRIZIONE COME CODICE E TIPI CODIFICATI (celle [3] e [12])")
+def verifica_descrizione_codice(df_xml_fatture, df_xml_codici_articolo,
+                                df_xml_righe):
+    titolo(13, "DESCRIZIONE COME CODICE E TIPI CODIFICATI (cella [12])")
 
     print(mostra(df_xml_codici_articolo[
         ["CFOR_XML", "CodiceTipoXML", "CodiceValoreXML",
@@ -777,34 +778,76 @@ def verifica_descrizione_codice(df_xml_codici_articolo):
         df_xml_codici_articolo["CodiceValoreNormalizzato"].dropna()
     )
 
+    def tipi_della_linea(file_xml, numero_linea):
+        """Tipi di codice rimasti sulle linee di quell'XML."""
+
+        chiavi = set(
+            df_xml_fatture.loc[
+                (df_xml_fatture["FileXML"] == file_xml)
+                & (df_xml_fatture["NumeroLinea"] == numero_linea),
+                "ChiaveRigaXML",
+            ]
+        )
+
+        return df_xml_codici_articolo.loc[
+            df_xml_codici_articolo["ChiaveRigaXML"].isin(chiavi),
+            "CodiceTipoXML",
+        ].tolist()
+
     controlla(
         "la descrizione di F005 diventa un codice articolo",
-        len(descrizioni) == 1
-        and descrizioni["CodiceValoreNormalizzato"].iloc[0] == "ART222",
+        sorted(
+            descrizioni.loc[
+                descrizioni["CFOR_XML"] == "F005",
+                "CodiceValoreNormalizzato",
+            ].tolist()
+        ) == ["ART222"],
         mostra(descrizioni),
     )
 
     controlla(
-        "la descrizione vale solo per il fornitore che la codifica",
-        fornitori_descrizione == ["F005"],
+        "la descrizione di F006 usa ESTRAI_PRIMA_STRINGA",
+        descrizioni.loc[
+            descrizioni["CFOR_XML"] == "F006",
+            "CodiceValoreNormalizzato",
+        ].tolist() == ["1234"],
+        mostra(descrizioni),
+    )
+
+    controlla(
+        "la descrizione vale solo per i fornitori che la codificano",
+        fornitori_descrizione == ["F005", "F006"],
         str(fornitori_descrizione),
     )
 
     controlla(
-        "nessuna descrizione sulle linee che hanno gia' un codice",
-        df_xml_codici_articolo.loc[
-            df_xml_codici_articolo["ChiaveRigaXML"] == 14,
-            "CodiceTipoXML",
-        ].tolist() == ["FORN"],
-        str(df_xml_codici_articolo.loc[
-            df_xml_codici_articolo["ChiaveRigaXML"] == 14,
-            "CodiceTipoXML",
-        ].tolist()),
+        "la descrizione si usa anche con un codice non codificato "
+        "sulla linea (MINSAN)",
+        tipi_della_linea("IT07777777777_00040.xml", 1) == ["Descrizione"],
+        str(tipi_della_linea("IT07777777777_00040.xml", 1)),
+    )
+
+    controlla(
+        "nessuna descrizione sulle linee che hanno gia' un codice "
+        "codificato",
+        tipi_della_linea("IT06666666666_00030.xml", 2) == ["FORN"],
+        str(tipi_della_linea("IT06666666666_00030.xml", 2)),
+    )
+
+    chiave_f006 = df_xml_righe.loc[
+        df_xml_righe["NumeroFattura"] == "00040", "ChiaveArticoloXML"
+    ].tolist()
+
+    controlla(
+        "F006 si abbina al carico tramite il codice preso dalla "
+        "descrizione",
+        chiave_f006 == ["CART|1234"],
+        str(chiave_f006),
     )
 
     controlla(
         "tipo non codificato escluso dalla tabella dei codici",
-        "XYZ" not in tipi_presenti,
+        "XYZ" not in tipi_presenti and "MINSAN" not in tipi_presenti,
         str(sorted(tipi_presenti)),
     )
 
@@ -1042,7 +1085,11 @@ def main():
     verifica_dizionario(namespace["dizionari"])
     verifica_regole_allineate(namespace)
     verifica_perimetro(namespace["df_fatture"])
-    verifica_descrizione_codice(namespace["df_xml_codici_articolo"])
+    verifica_descrizione_codice(
+        namespace["df_xml_fatture"],
+        namespace["df_xml_codici_articolo"],
+        namespace["df_xml_righe"],
+    )
     verifica_export(
         namespace["_cartella_output"],
         namespace["df_powerbi"],
