@@ -187,6 +187,17 @@ XML_FILES = {
                   codici=[("FORN", "ART-001"), ("XYZ", "SCONTO-9")]),
         ]),
     ),
+    # F006: il codice cliente sta nella PRIMA parola della
+    # descrizione ("1234 magnesio..."), ma la linea porta anche un
+    # CodiceArticolo MINSAN che il dizionario non codifica. La
+    # descrizione deve essere usata lo stesso: il MINSAN non
+    # contribuisce in alcun modo alla chiave articolo.
+    "IT07777777777_00040.xml": xml_documento(
+        "00040", "2024-12-28",
+        ddt("H/40", "2024-12-24", [1]),
+        linea(1, "1234 magnesio 500mg", 5, 2.00, 10.00, "PZ",
+              codici=[("MINSAN", "030999888")]),
+    ),
     # Non FPR12: va scartato in lettura.
     "IT04444444444_00011.xml": xml_documento(
         "11", "2024-05-02", "",
@@ -292,6 +303,14 @@ CARICHI = pd.DataFrame([
             CEAS="IT06666666666_00030",
             **{"Qtà": 3, "Importo_ns_fattura": 12.00, "PF02IAL": 4.00,
                "QTA ORDINE": 3, "QTA ACCETT": 3}),
+    # carico F006: l'articolo cliente 1234 esiste solo nella
+    # descrizione dell'XML
+    _carico(CFOR="F006", NDOGIAA="00040", TDATIAA="2024-12-28",
+            NDOGIAB="H-40", TDATIAB="2024-12-24", CART="1234",
+            XART="1234 magnesio 500mg", CALA="ART-1234", CUMF="PZ",
+            CEAS="IT07777777777_00040",
+            **{"Qtà": 5, "Importo_ns_fattura": 10.00, "PF02IAL": 2.00,
+               "QTA ORDINE": 5, "QTA ACCETT": 5}),
     # fuori perimetro: tipo documento diverso da 60I
     _carico(CFOR="F009", NDOGIAA="999", TDATIAA="2024-01-01",
             NDOGIAB="Q/1", TDATIAB="2024-01-01", CART="C009",
@@ -373,6 +392,11 @@ DIZIONARIO = {
          "CodiceTipoXML": "Descrizione",
          "CampoCanonico": "CODICE_FORNITORE",
          "RegolaNormalizzazione": "ESTRAI_ULTIMA_STRINGA"},
+        # F006: il codice cliente e' la prima parola della descrizione
+        {"CFOR": "F006", "Denominazione": "sei",
+         "CodiceTipoXML": "Descrizione",
+         "CampoCanonico": "CODICE_CLIENTE",
+         "RegolaNormalizzazione": "ESTRAI_PRIMA_STRINGA"},
         # F009: regola presente solo sul lato XML. Il lato carichi non
         # ha la riga e ricade sul default, quindi le due chiavi non
         # coincidono: la diagnostica deve segnalarlo.
@@ -401,6 +425,9 @@ DIZIONARIO = {
         {"CFOR": "F005", "Denominazione": "cinque",
          "CampoCanonico": "CODICE_FORNITORE",
          "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
+        {"CFOR": "F006", "Denominazione": "sei",
+         "CampoCanonico": "CODICE_CLIENTE",
+         "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
         # refuso voluto: CODICE_FORNTORE invece di CODICE_FORNITORE.
         # La regola non deve essere applicata, ma il campo va segnalato.
         {"CFOR": "F003", "Denominazione": "tre",
@@ -414,6 +441,9 @@ DIZIONARIO = {
          "RegolaDDTXML": "NESSUNA_REGOLA",
          "RegolaDDTCarico": "NESSUNA_REGOLA"},
         {"CFOR": "F005", "Denominazione": "cinque",
+         "RegolaDDTXML": "RIMUOVI_SEPARATORI",
+         "RegolaDDTCarico": "RIMUOVI_SEPARATORI"},
+        {"CFOR": "F006", "Denominazione": "sei",
          "RegolaDDTXML": "RIMUOVI_SEPARATORI",
          "RegolaDDTCarico": "RIMUOVI_SEPARATORI"},
     ]),

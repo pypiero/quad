@@ -74,8 +74,10 @@ il test si adegua da solo.
 10. **Dizionario** — regola non riconosciuta e chiave duplicata segnalate senza bloccare;
 11. **Perimetro e anagrafiche** — filtro `CDOCIAA`, precedenza `TDEC` su `CARF`, punti di consegna;
 12. **Descrizione come codice e tipi codificati** — un fornitore che scrive il codice in coda alla
-    descrizione viene abbinato lo stesso; la descrizione non viene usata sulle linee già codificate;
-    un `CodiceTipoXML` assente dal dizionario non entra nella tabella dei codici;
+    descrizione viene abbinato lo stesso; un altro che lo scrive in testa (`ESTRAI_PRIMA_STRINGA`)
+    si abbina anche quando la linea porta un `MINSAN` non codificato; la descrizione non viene
+    usata sulle linee già codificate; un `CodiceTipoXML` assente dal dizionario non entra nella
+    tabella dei codici;
 13. **Export** — file creati e tipo delle celle nell'xlsx (date, numeri, testo).
 
 ## Provare il test contro un'altra versione del notebook

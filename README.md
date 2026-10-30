@@ -167,9 +167,14 @@ toccare il codice. Vale anche per i tipi virtuali che il notebook costruisce da 
 
 ### La descrizione come codice articolo
 
-Alcuni fornitori non mandano alcun `CodiceArticolo`: il codice articolo è scritto dentro la
-`Descrizione`, come prima o come ultima parola. Per loro la sezione `[3]` propone un codice di tipo
-virtuale `Descrizione`, con il testo della descrizione come valore.
+Alcuni fornitori scrivono il codice articolo dentro la `Descrizione` invece che in un
+`CodiceArticolo`, come prima o come ultima parola: `1234 melatonina in compresse 1mg` con codice
+cliente `1234`. Per loro la sezione `[12]` propone un codice di tipo virtuale `Descrizione`, con il
+testo della descrizione come valore.
+
+Il punto in cui viene costruito non è casuale: la sezione `[12]` è la prima in cui il dizionario è
+già stato letto, e servono entrambe le informazioni — il tipo codificato per quel `CFOR` e
+l'assenza di altri codici utilizzabili sulla linea.
 
 Non si attiva da solo. Per usarlo serve **una riga** nel foglio `RegoleCodiciXML` per quel fornitore,
 per esempio:
@@ -184,10 +189,12 @@ pivot, `ChiaveArticoloXML`, lookup `CALA`, report.
 
 Tre cose da tenere presenti:
 
-- **la riga si aggiunge solo alle linee prive di qualsiasi altro codice.** Su una linea già
-  codificata il frammento di descrizione finirebbe nello stesso campo canonico del codice vero e nel
-  report comparirebbe al suo posto (una linea con codice cliente `C002` e descrizione `BURRO`
-  mostrerebbe `Codice Art. Fornitore = BURRO`);
+- **la riga si aggiunge solo alle linee senza nessun codice *codificato*.** Un `CodiceArticolo` di
+  un tipo che il dizionario non conosce non conta: viene scartato comunque, quindi la descrizione
+  resta l'unico appiglio (è il caso di `MINSAN`). Su una linea con un codice vero, invece, il
+  frammento di descrizione finirebbe nello stesso campo canonico e nel report comparirebbe al suo
+  posto: una linea con codice cliente `C002` e descrizione `BURRO` mostrerebbe
+  `Codice Art. Fornitore = BURRO`;
 - **va abilitata fornitore per fornitore.** `ESTRAI_ULTIMA_STRINGA` su una descrizione normale
   produce risultati inattesi: `PANE INTEGRALE` → `INTEGRALE`, `SCONTO FEDELTA` → `FEDELTA`;
 - **`ESTRAI_ULTIMA_STRINGA` taglia anche sui trattini.** Un codice `ART-222` scritto in coda alla
