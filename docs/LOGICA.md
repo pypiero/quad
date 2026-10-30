@@ -281,13 +281,22 @@ descrizione, quantità, unità di misura, prezzo unitario, prezzo totale, riferi
 `NumeroDDT`, `DataDDT`, `TipoAbbinamentoDDT` (`ESPLICITO`, `IMPLICITO`, `NON_ABBINATO`,
 `NESSUN_DDT`).
 
-Per ogni `CodiceArticolo` produce una riga in formato **lungo** (`CodiceTipoXML`, `CodiceValoreXML`),
-più una riga aggiuntiva per `RiferimentoAmministrazione`, trattato come tipo virtuale.
+Per ogni `CodiceArticolo` produce una riga in formato **lungo** (`CodiceTipoXML`, `CodiceValoreXML`).
+Altre due righe vengono aggiunte senza condizioni:
 
-Qui c'è solo l'estrazione: ogni `CodiceArticolo` diventa una riga, più una per
-`RiferimentoAmministrazione`. La `Descrizione` **non** viene ancora toccata — serve il dizionario per
-decidere, e a questo punto non è ancora stato letto (vedi [12]).
+- `RiferimentoAmministrazione`, quando presente;
+- `Descrizione`, quando presente, con `CodiceTipoXML = "Descrizione"`.
 
+La descrizione è quindi un tipo di codice come gli altri, con il progressivo più alto della linea.
+Non si decide qui se serve: se il dizionario non la codifica, il filtro della cella [12] la scarta.
+Il progressivo alto serve al pivot: a parità di campo canonico vince il codice con il progressivo più
+basso, quindi un `CodiceArticolo` vero non viene mai scavalcato dalla descrizione nello stesso
+campo.
+
+Su campi diversi vale invece la gerarchia della chiave (`EAN → CART → FORN`): se la descrizione è
+mappata su `CODICE_CLIENTE` e la linea porta solo un codice fornitore, il `CART` ricavato dalla
+descrizione vince sul `FORN`. È la conseguenza diretta di trattare la descrizione come un codice
+qualsiasi, ed è accettata.
 
 
 Alla fine: conversione dei tipi (`DataFattura` e `DataDDT` a data, campi numerici a numero con
@@ -510,20 +519,6 @@ quindi non può entrare nei livelli successivi che ragionano per fornitore.
 
 La normalizzazione avviene sulle **terne distinte** `(CFOR, CodiceTipoXML, CodiceValoreXML)`, non su
 ogni riga: stesso valore, stesso risultato, meno lavoro.
-
-**La descrizione come codice articolo (passo 2).** Prima di normalizzare, alle linee senza nessun
-codice *codificato* viene aggiunta una riga di tipo virtuale `Descrizione`, con il testo della
-descrizione come valore. La regola del dizionario (`ESTRAI_PRIMA_STRINGA`, `ESTRAI_ULTIMA_STRINGA`, …)
-decide quale parte della descrizione diventa il codice.
-
-La condizione è "nessun codice **codificato**", non "nessun `CodiceArticolo`": una linea che porta
-solo un codice di tipo non configurato (per esempio `MINSAN`) non ha, di fatto, nessun codice
-utilizzabile, quindi la descrizione è l'unico appiglio. Il controllo sta qui e non in [3] proprio
-perché richiede il dizionario. Su una linea con un codice vero la riga non viene aggiunta: il
-frammento di descrizione finirebbe nello stesso campo canonico e nel report comparirebbe al suo
-posto.
-
-Come ogni altro tipo, la descrizione resta inerte finché il dizionario non la codifica.
 
 **Filtro dei tipi codificati.** Alla fine della cella restano solo i codici la cui coppia
 `(CFOR, CodiceTipoXML)` compare nel foglio `RegoleCodiciXML`. Un tipo non codificato non avrebbe

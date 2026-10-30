@@ -757,7 +757,7 @@ def verifica_perimetro(df_fatture):
 
 def verifica_descrizione_codice(df_xml_fatture, df_xml_codici_articolo,
                                 df_xml_righe):
-    titolo(13, "DESCRIZIONE COME CODICE E TIPI CODIFICATI (cella [12])")
+    titolo(13, "DESCRIZIONE COME CODICE E TIPI CODIFICATI (celle [3] e [12])")
 
     print(mostra(df_xml_codici_articolo[
         ["CFOR_XML", "CodiceTipoXML", "CodiceValoreXML",
@@ -796,13 +796,19 @@ def verifica_descrizione_codice(df_xml_fatture, df_xml_codici_articolo,
 
     controlla(
         "la descrizione di F005 diventa un codice articolo",
-        sorted(
-            descrizioni.loc[
-                descrizioni["CFOR_XML"] == "F005",
-                "CodiceValoreNormalizzato",
-            ].tolist()
-        ) == ["ART222"],
+        "ART222" in descrizioni.loc[
+            descrizioni["CFOR_XML"] == "F005",
+            "CodiceValoreNormalizzato",
+        ].tolist(),
         mostra(descrizioni),
+    )
+
+    controlla(
+        "la descrizione viene aggiunta a ogni linea, anche quando "
+        "c'e' gia' un codice",
+        tipi_della_linea("IT06666666666_00030.xml", 2)
+        == ["FORN", "Descrizione"],
+        str(tipi_della_linea("IT06666666666_00030.xml", 2)),
     )
 
     controlla(
@@ -827,11 +833,28 @@ def verifica_descrizione_codice(df_xml_fatture, df_xml_codici_articolo,
         str(tipi_della_linea("IT07777777777_00040.xml", 1)),
     )
 
+    controllo_linea_con_codice = df_xml_righe.loc[
+        df_xml_righe["NumeroFattura"] == "00030",
+        "Codice Art. Fornitore",
+    ].dropna().tolist()
+
     controlla(
-        "nessuna descrizione sulle linee che hanno gia' un codice "
-        "codificato",
-        tipi_della_linea("IT06666666666_00030.xml", 2) == ["FORN"],
-        str(tipi_della_linea("IT06666666666_00030.xml", 2)),
+        "un codice vero prevale sulla descrizione nello stesso campo",
+        controllo_linea_con_codice[0] == "ART001",
+        str(controllo_linea_con_codice),
+    )
+
+    controlla(
+        "il progressivo della descrizione e' sempre l'ultimo",
+        int(
+            descrizioni["ProgressivoCodiceXML"].max()
+        ) > int(
+            df_xml_codici_articolo.loc[
+                df_xml_codici_articolo["CodiceTipoXML"] != "Descrizione",
+                "ProgressivoCodiceXML",
+            ].max()
+        ),
+        str(sorted(descrizioni["ProgressivoCodiceXML"].tolist())),
     )
 
     chiave_f006 = df_xml_righe.loc[
