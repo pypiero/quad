@@ -353,7 +353,7 @@ contiene ancora `DDT_BASE` viene segnalato come regola non riconosciuta e ricade
 la stessa regola — quindi il risultato non cambia, cambia solo l'avviso.
 
 **Regola non riconosciuta: non blocca.** Si applica `RIMUOVI_SEPARATORI` e `stato_regola()` restituisce
-`NON RICONOSCIUTA: <valore>`, così la sezione [6] la elenca. È una scelta deliberata: un errore di
+`NON RICONOSCIUTA: <valore>`, così la sezione [6-bis] la elenca. È una scelta deliberata: un errore di
 battitura nel dizionario non deve fermare la produzione, ma non deve nemmeno passare inosservato.
 
 **Perché il confronto è ordinale**: `prima_stringa` considerare alfanumerico solo `0-9` e `A-Z`
@@ -389,12 +389,18 @@ ordinato a mano produce doppioni, e il notebook li segnala invece di fallire.
 
 **Righe senza `CFOR`**: ignorate. Senza fornitore la regola non è applicabile.
 
-### [6] Diagnostica del dizionario
+### [6] Lettura del dizionario
 
-Blocco **rimovibile** (`INIZIO/FINE BLOCCO DIAGNOSTICA`): copia il file dei dizionari in locale, lo
-legge con `sheet_name=None`, stampa quante righe ha ogni foglio e quante hanno un `CFOR`, poi
-chiama `prepara_dizionari`. Non produce dati usati a valle: cancellando il blocco il flusso
-continua a funzionare.
+Copia il file dei dizionari in locale, lo legge con `sheet_name=None`, stampa quante righe ha ogni
+foglio e quante hanno un `CFOR`, poi chiama `prepara_dizionari`.
+
+**Produce dati usati a valle**: senza questa cella il notebook non funziona.
+
+### [6-bis] Diagnostica del dizionario
+
+Blocco **rimovibile** (`INIZIO/FINE BLOCCO DIAGNOSTICA`): stampa le regole non riconosciute e le
+chiavi duplicate, tabelle costruite da `prepara_dizionari`. Non produce dati usati a valle:
+cancellando il blocco il flusso continua a funzionare.
 
 ### [7] Carichi: lettura, tipi, filtro
 
@@ -481,7 +487,7 @@ Stesso codice, due chiavi, nessun match e nessun errore. La sezione confronta qu
 **effettive** dei due lati e produce `regole_non_allineate` (`CFOR`, `Campo`, `RegolaXML`,
 `RegolaCarico`). Il confronto è sull'effetto, non sul testo: una regola non riconosciuta ricade sul
 default esattamente come una regola assente, e non viene segnalata (l'anomalia è già nella
-diagnostica della sezione `[6]`). Anche i DDT vengono controllati, confrontando `RegolaDDTXML` e
+diagnostica della sezione `[6-bis]`). Anche i DDT vengono controllati, confrontando `RegolaDDTXML` e
 `RegolaDDTCarico` della stessa riga. È un controllo di sola lettura: non cambia il risultato.
 
 **Nota storica**: fino a questa versione il lato carichi non veniva normalizzato affatto — la
@@ -704,9 +710,13 @@ Restano fuori dalla tabella due casi che non sono bolle: l'XML senza DDT con pi�
 
 ### [16] Export diagnostico
 
-Sei fogli in `export/riconciliazione.xlsx`: `df_merge`, `map_ddt`, `df_xml_righe`, `df_fatture`,
-`df_xml_fatture`, `df_xml_codici_articolo`. È il file da aprire quando un abbinamento non torna:
-permette di risalire a ogni passaggio.
+Di default un solo foglio in `export/riconciliazione.xlsx`: `df_merge`. È il file da aprire quando
+un abbinamento non torna, e le altre tabelle (`map_ddt`, `df_xml_righe`, `df_fatture`,
+`df_xml_fatture`, `df_xml_codici_articolo`) si aggiungono a mano in `TABELLE_DA_ESPORTARE` quando
+servono.
+
+Il motivo è il costo della scrittura: `df_merge` ha 82 colonne e Excel costa circa un secondo ogni
+1.000 righe per foglio. L'engine è `xlsxwriter` se installato, altrimenti `openpyxl`.
 
 ---
 
@@ -875,7 +885,7 @@ Parti sempre dal sintomo.
 | differenze quantità a zero ma prezzi diversi | report | il match è avvenuto sull'articolo giusto ma su un'altra riga di carico (vince l'`Indice` più basso) |
 | stesso articolo due volte | [12] | `ChiaveArticoloXML` diversa: uno dei due tipi di codice non è nel dizionario e viene scartato, oppure punta a un altro campo canonico |
 | colonna del report vuota | blocco finale | guarda la catena del `coalesce` per quella colonna |
-| regola ignorata | [6] | `Anomalie`: `NON RICONOSCIUTA` |
+| regola ignorata | [6-bis] | `Anomalie`: `NON RICONOSCIUTA` |
 | `IndexError`/`ValueError` in [13] | [13] | colonna sia chiave sia output; `DataDDT` è il caso già noto |
 
 **Le tre domande da farsi, in ordine**: la fattura è entrata (perimetro)? il DDT è stato abbinato
@@ -981,9 +991,9 @@ Stato abbinamento
 | Sezione | Funzioni |
 |---|---|
 | [3] | `testo` |
-| [4] | `in_testo`, `valore_pulito`, `regola_normalizzata`, `riduci_zeri`, `solo_cifre`, `finalizza`, `prima_stringa`, `dividi`, `regola_nessuna`, `regola_rimuovi_separatori`, `regola_solo_numeri`, `regola_estrai_prima`, `regola_estrai_ultima`, `REGOLE`, `regola_disponibile`, `normalizza`, `stato_regola` |
+| [4] | `in_testo`, `valore_pulito`, `regola_normalizzata`, `riduci_zeri`, `solo_cifre`, `finalizza`, `prima_stringa`, `dividi`, `regola_nessuna`, `regola_rimuovi_separatori`, `regola_solo_numeri`, `regola_estrai_prima`, `regola_estrai_ultima`, `REGOLE`, `normalizza`, `stato_regola` |
 | [5] | `chiave_cfor`, `chiave_testo`, `_leggi`, `prepara_dizionari`, `regola_codice_xml`, `regola_codice_carico`, `regola_ddt_xml`, `regola_ddt_carico`, `normalizza_*` |
-| [6] | `prendi_foglio` |
+| [6] | `prendi_foglio`, `prepara_dizionari` |
 | [7] | `read_source`, `apply_schema`, `validate_schema` |
 | [8] | `vuota_in_mancante`, `solo_chiavi_valide`, `ceas_da_nome_file` |
 | [13] | `campo_pivot`, `chiave_articolo_xml`, `somma_o_nulla`, `numeri_linea_xml` |
