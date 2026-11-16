@@ -216,6 +216,27 @@ Se il fornitore non compare, la colonna non è stata letta. La sezione `[15]` st
 esiti sono usciti per livello (`TipoMatch`): se `CALA` resta a zero, il problema non è la priorità
 ma i codici che non si incontrano.
 
+Per il dettaglio riga per riga basta indicare il fornitore in `[1]`:
+
+```python
+CFOR_VERIFICA_MATCH = ["12345"]   # vuoto = nessuna stampa
+```
+
+In `[15]` esce una tabella con i tre codici normalizzati, quali livelli hanno trovato una riga di
+carico (`TrovaEAN`/`TrovaCART`/`TrovaCALA`), il livello scelto, la riga di carico agganciata e
+l'articolo che ne esce:
+
+| CFOR | EAN | ClienteXML | FornitoreXML | TrovaEAN | TrovaCART | TrovaCALA | TipoMatch | CART | CALA |
+|---|---|---|---|---|---|---|---|---|---|
+| `F011` | `8007777000000` | `7777` | `ART300` | sì | sì | sì | `CALA` | `C300` | `ART-300` |
+
+#### `ChiaveArticoloXML` non c'entra con la priorità
+
+La chiave che si vede nel foglio diagnostico (`EAN|…`, `CART|…`, `FORN|…`) nasce nella sezione
+`[13]` con l'ordine **fisso** `EAN → CART → FORN`, prima che la priorità venga applicata: serve a
+**raggruppare** le righe XML, non a scegliere il livello. Può quindi dire `EAN|…` mentre il match è
+`CALA`, ed è corretto. È solo un'etichetta del gruppo, non il criterio di abbinamento.
+
 **Limite noto:** `EAN` ed `EAN13` sono due tipi diversi ma lo stesso campo canonico `EAN`, e il
 pivot ne tiene uno solo. La priorità non può distinguerli.
 

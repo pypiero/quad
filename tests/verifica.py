@@ -10,7 +10,11 @@ Non richiede Fabric, OneLake né i file Excel di origine: servono
 solo pandas e openpyxl.
 """
 
+import contextlib
+import io
+import json
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 
@@ -1128,8 +1132,75 @@ def verifica_priorita(df_merge, df_powerbi, dizionari):
     )
 
 
+def verifica_dettaglio_match(percorso_notebook):
+    """
+    Il dettaglio attivato da CFOR_VERIFICA_MATCH non deve rompere
+    nulla e deve mostrare i tre livelli, il livello scelto e
+    l'articolo che ne esce.
+    """
+
+    titolo(15, "DETTAGLIO DELL'ABBINAMENTO ARTICOLO (cella [15])")
+
+    with open(percorso_notebook, encoding="utf-8") as file:
+        notebook = json.load(file)
+
+    celle = ["".join(cella["source"]) for cella in notebook["cells"]]
+
+    sorgente = celle[0]
+    modificato = sorgente.replace(
+        "CFOR_VERIFICA_MATCH = []",
+        'CFOR_VERIFICA_MATCH = ["F011"]',
+    )
+
+    controlla(
+        "la costante CFOR_VERIFICA_MATCH è raggiungibile dal test",
+        modificato != sorgente,
+        "costante non trovata nel notebook",
+    )
+
+    if modificato == sorgente:
+        return
+
+    notebook["cells"][0]["source"] = modificato.splitlines(keepends=True)
+
+    cartella = tempfile.mkdtemp(prefix="quad_dettaglio_")
+    percorso = Path(cartella) / "notebook.ipynb"
+
+    with open(percorso, "w", encoding="utf-8") as file:
+        json.dump(notebook, file, ensure_ascii=False)
+
+    # l'esecuzione del notebook stampa molto: qui interessa solo il
+    # DataFrame che produce
+    with contextlib.redirect_stdout(io.StringIO()):
+        namespace = harness.esegui_notebook(percorso_notebook=percorso)
+
+    dettaglio = namespace["df_verifica_match"]
+
+    controlla(
+        "il dettaglio viene prodotto per il fornitore indicato",
+        len(dettaglio) == 1 and dettaglio["CFOR"].iloc[0] == "F011",
+        str(dettaglio[["CFOR"]].to_dict("records")),
+    )
+
+    controlla(
+        "il dettaglio dice quali livelli trovano una riga",
+        bool(dettaglio["TrovaEAN"].iloc[0])
+        and bool(dettaglio["TrovaCART"].iloc[0])
+        and bool(dettaglio["TrovaCALA"].iloc[0]),
+        str(dettaglio[["TrovaEAN", "TrovaCART", "TrovaCALA"]].to_dict("records")),
+    )
+
+    controlla(
+        "il dettaglio riporta il livello scelto e l'articolo abbinato",
+        dettaglio["TipoMatch"].iloc[0] == "CALA"
+        and dettaglio["CALA"].iloc[0] == "ART-300"
+        and dettaglio["CART"].iloc[0] == "C300",
+        str(dettaglio[["TipoMatch", "CART", "CALA"]].to_dict("records")),
+    )
+
+
 def verifica_export(cartella_output, df_powerbi, namespace):
-    titolo(15, "EXPORT E TIPI DELLE CELLE (celle [16])")
+    titolo(16, "EXPORT E TIPI DELLE CELLE (celle [16])")
 
     for nome in ("riconciliazione.xlsx", "riconciliazione_powerbi.xlsx"):
         controlla(
@@ -1311,7 +1382,7 @@ def verifica_export(cartella_output, df_powerbi, namespace):
 
 
 def stampa_riepilogo():
-    titolo(16, "RIEPILOGO")
+    titolo(17, "RIEPILOGO")
 
     for nome, esito, dettaglio in ESITI:
         riga = ("PASS  " if esito else "FAIL  ") + nome
@@ -1360,6 +1431,8 @@ def main():
         namespace["df_powerbi"],
         namespace["dizionari"],
     )
+    verifica_dettaglio_match(harness.NOTEBOOK)
+
     verifica_export(
         namespace["_cartella_output"],
         namespace["df_powerbi"],

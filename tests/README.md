@@ -83,7 +83,9 @@ il test si adegua da solo.
     senza colonna resta l'ordine storico; le anomalie (valore non valido, priorità duplicata, due
     tipi sullo stesso campo con priorità diverse) vengono segnalate senza bloccare, mentre una
     cella vuota è un campo non configurato e non produce avvisi. Verifica anche che
-    `Codice articolo interno` prenda il valore dal carico e usi l'XML solo come ripiego;
+    `Codice articolo interno` prenda il valore dal carico e usi l'XML solo come ripiego, che
+    `ChiaveArticoloXML` resti una chiave di raggruppamento e non segua la priorità, e che il
+    dettaglio attivato da `CFOR_VERIFICA_MATCH` produca i tre livelli con l'articolo abbinato;
 14. **Export** — file creati e tipo delle celle nell'xlsx (date, numeri, testo).
 
 ## Provare il test contro un'altra versione del notebook

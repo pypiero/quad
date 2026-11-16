@@ -666,7 +666,14 @@ creato `ID_Riga_XML`.
 **2. Lato carichi.** Stessa cosa su `df_fatture` con `(CFOR, NDOGIAA, NDOGIAB_Chiave)`, chiave orfano
 se manca.
 
-**3. Tre lookup, un solo esito.** Una tabella di lookup per livello di codice:
+**3. Tre lookup, un solo esito.**
+
+> Per capire cosa è successo su un fornitore basta metterlo in `CFOR_VERIFICA_MATCH` (cella `[1]`):
+> la stessa cella stampa una tabella con i tre codici, i livelli che hanno trovato una riga e
+> l'articolo abbinato. `ChiaveArticoloXML` non va guardata a questo scopo: nasce in `[13]` con
+> l'ordine fisso `EAN → CART → FORN` e serve solo a raggruppare le righe.
+
+ Una tabella di lookup per livello di codice:
 
 ```
 (CFOR, NDOGIAA, ChiaveDDT_ComuneCarico, EAN)  → Indice minimo + numero di righe
