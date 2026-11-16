@@ -948,9 +948,22 @@ def verifica_priorita(df_merge, df_powerbi, dizionari):
     ]
 
     controlla(
-        "la priorità ribalta l'esito: vince CALA, non CART",
+        "la priorità ribalta l'esito: vince CALA, non CART né EAN",
         len(riga) == 1 and riga["TipoMatch"].iloc[0] == "CALA",
         str(riga[["TipoMatch", "StatoAbbinamento"]].to_dict("records")),
+    )
+
+    # L'EAN di F011 non ha PrioritaMatch e resta al default 10, lo
+    # stesso numero con cui è dichiarato il fornitore: la priorità
+    # scritta a mano deve vincere comunque.
+    controlla(
+        "una priorità dichiarata batte un default con lo stesso numero",
+        dizionari["PrioritaOrigine"] == "RegoleCodiciXML"
+        and ("F011", "CODICE_FORNITORE") in dizionari["PrioritaDichiarate"]
+        and ("F011", "EAN") not in dizionari["PrioritaDichiarate"],
+        f"origine={dizionari['PrioritaOrigine']}, "
+        f"colonna={dizionari['PrioritaColonna']}, "
+        f"dichiarate={sorted(dizionari['PrioritaDichiarate'])}",
     )
 
     controlla(
@@ -993,14 +1006,89 @@ def verifica_priorita(df_merge, df_powerbi, dizionari):
     controlla(
         "senza PrioritaMatch resta l'ordine storico EAN -> CART -> CALA",
         len(riga_storica) == 1
-        and riga_storica["TipoMatch"].iloc[0] == "CART",
+        and riga_storica["TipoMatch"].iloc[0] == "EAN",
         str(riga_storica[["TipoMatch"]].to_dict("records")),
+    )
+
+    controlla(
+        "senza colonna l'origine della priorità è assente",
+        senza["dizionari"]["PrioritaOrigine"] is None
+        and senza["dizionari"]["PrioritaColonna"] is None,
+        str(senza["dizionari"]["PrioritaOrigine"]),
     )
 
     controlla(
         "senza PrioritaMatch nessuna anomalia",
         anomalie_priorita(senza["dizionari"]) == [],
         str(anomalie_priorita(senza["dizionari"])),
+    )
+
+    # ---- LETTURA TOLLERANTE DELLA COLONNA -----------------------
+
+    def intestazione_diversa(copia):
+        # "Priorita Match" invece di "PrioritaMatch": stesso effetto
+        copia["RegoleCodiciXML"] = copia["RegoleCodiciXML"].rename(
+            columns={"PrioritaMatch": "Priorita Match"}
+        )
+
+    tollerante = esegui_con_dizionario(intestazione_diversa)
+
+    riga_tollerante = tollerante["df_merge"].loc[
+        (tollerante["df_merge"]["NumeroFattura"] == "00080")
+        & (tollerante["df_merge"]["StatoAbbinamento"] == "Abbinato")
+    ]
+
+    controlla(
+        "intestazione 'Priorita Match' riconosciuta lo stesso",
+        tollerante["dizionari"]["PrioritaColonna"] == "Priorita Match"
+        and len(riga_tollerante) == 1
+        and riga_tollerante["TipoMatch"].iloc[0] == "CALA",
+        f"colonna={tollerante['dizionari']['PrioritaColonna']}, "
+        f"{riga_tollerante[['TipoMatch']].to_dict('records')}",
+    )
+
+    # ---- STESSA COLONNA SUL FOGLIO DEI CARICHI -------------------
+
+    def priorita_sul_carico(copia):
+        # qui la chiave è già (CFOR, CampoCanonico): è il posto
+        # naturale in cui cercare la priorità
+        copia["RegoleCodiciXML"] = copia["RegoleCodiciXML"].drop(
+            columns=["PrioritaMatch"]
+        )
+        tabella = copia["RegoleCodiciCarico"].copy()
+        tabella["PrioritaMatch"] = None
+        tabella.loc[
+            (tabella["CFOR"] == "F011")
+            & (tabella["CampoCanonico"] == "CODICE_FORNITORE"),
+            "PrioritaMatch",
+        ] = 10
+        tabella.loc[
+            (tabella["CFOR"] == "F011")
+            & (tabella["CampoCanonico"] == "CODICE_CLIENTE"),
+            "PrioritaMatch",
+        ] = 90
+        copia["RegoleCodiciCarico"] = tabella
+
+    sul_carico = esegui_con_dizionario(priorita_sul_carico)
+
+    riga_carico = sul_carico["df_merge"].loc[
+        (sul_carico["df_merge"]["NumeroFattura"] == "00080")
+        & (sul_carico["df_merge"]["StatoAbbinamento"] == "Abbinato")
+    ]
+
+    controlla(
+        "PrioritaMatch vale anche sul foglio RegoleCodiciCarico",
+        sul_carico["dizionari"]["PrioritaOrigine"] == "RegoleCodiciCarico"
+        and len(riga_carico) == 1
+        and riga_carico["TipoMatch"].iloc[0] == "CALA",
+        f"origine={sul_carico['dizionari']['PrioritaOrigine']}, "
+        f"{riga_carico[['TipoMatch']].to_dict('records')}",
+    )
+
+    controlla(
+        "priorità sul foglio carichi senza anomalie",
+        anomalie_priorita(sul_carico["dizionari"]) == [],
+        str(anomalie_priorita(sul_carico["dizionari"])),
     )
 
     # ---- VALIDAZIONI --------------------------------------------
@@ -1072,13 +1160,24 @@ def verifica_priorita(df_merge, df_powerbi, dizionari):
 
     vuota = esegui_con_dizionario(priorita_vuota)
 
+    riga_vuota = vuota["df_merge"].loc[
+        (vuota["df_merge"]["NumeroFattura"] == "00080")
+        & (vuota["df_merge"]["StatoAbbinamento"] == "Abbinato")
+    ]
+
+    # La colonna è facoltativa: una cella vuota è un campo non
+    # configurato, non un errore. Quel campo ricade sull'ordine
+    # storico, che qui rimette davanti l'EAN.
     controlla(
-        "PrioritaMatch mancante segnalata",
-        any(
-            "MANCANTE O NON VALIDA" in stato
-            for stato in anomalie_priorita(vuota["dizionari"])
-        ),
+        "PrioritaMatch vuota non è un'anomalia",
+        anomalie_priorita(vuota["dizionari"]) == [],
         str(anomalie_priorita(vuota["dizionari"])),
+    )
+
+    controlla(
+        "il campo senza priorità ricade sull'ordine storico",
+        len(riga_vuota) == 1 and riga_vuota["TipoMatch"].iloc[0] == "EAN",
+        str(riga_vuota[["TipoMatch"]].to_dict("records")),
     )
 
     def due_tipi_stesso_campo(copia):

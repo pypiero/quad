@@ -169,33 +169,69 @@ Le regole sono poche e valgono per tutte le righe del notebook:
 - **la priorità appartiene al campo canonico, non al tipo.** Il campo `CODICE_FORNITORE` vale il
   **minimo** fra i tipi che vi puntano: con `FORN = 10` e `Descrizione = 90` è `10`, quindi il
   codice fornitore vero precede la descrizione;
+- **una priorità scritta vince sempre su un campo lasciato al default.** I campi compilati
+  vengono provati **prima** di quelli che ricadono sull'ordine storico, anche a parità di numero.
+  È la differenza che conta: dichiarare `FORN = 10` non viene annullato dall'`EAN`, che senza
+  configurazione vale `10` anche lui. Se il fornitore manda un EAN che punta all'articolo
+  sbagliato, il codice fornitore vince lo stesso;
 - **chi non ha priorità ricade sull'ordine storico**: `EAN = 10`, `CODICE_CLIENTE = 20`,
-  `CODICE_FORNITORE = 30` (i campi sconosciuti finiscono in fondo). Se la colonna non esiste
-  proprio, o una cella è vuota, si applica questo default: **il comportamento storico resta quello
-  di chi non configura nulla**;
+  `CODICE_FORNITORE = 30` (i campi sconosciuti finiscono in fondo). Una cella vuota è un campo
+  **non configurato**, non un errore: si compila solo dove serve e gli altri restano al default;
 - **la priorità non cambia quali codici si provano**, cambia solo **quale esito vince** quando una
   riga trova un match a più livelli. I tre lookup restano indipendenti e vengono tutti eseguiti.
 
-Esempio (fornitore `F011`): la stessa riga XML è raggiungibile sia dalla descrizione — che produce
-un `CART` sbagliato — sia dal codice fornitore, che è quello giusto. Con la colonna assente il
-report mostra il livello `CART`; con `FORN = 10` e `Descrizione = 90` lo stesso documento mostra
-`CALA` e l'articolo corretto.
+Esempio (fornitore `F011`): la stessa riga XML è raggiungibile dall'EAN e dalla descrizione — che
+puntano a un `CART` sbagliato — e dal codice fornitore, che è quello giusto. Senza la colonna vince
+l'`EAN` (ordine storico); con `FORN = 10` e `Descrizione = 90` lo stesso documento mostra `CALA` e
+l'articolo corretto.
+
+#### Dove si scrive la colonna
+
+`PrioritaMatch` si legge, in quest'ordine:
+
+1. dal foglio **`RegoleCodiciXML`**, una riga per `CFOR` + `CodiceTipoXML` (è la forma
+   dell'esempio: la priorità dichiara quale *tipo di codice* vale di più);
+2. se lì la colonna non c'è, dal foglio **`RegoleCodiciCarico`**, una riga per `CFOR` +
+   `CampoCanonico`. Qui la chiave è già quella che serve, quindi si compila direttamente il campo:
+   `CODICE_FORNITORE = 10`, `CODICE_CLIENTE = 90`.
+
+Se le due colonne esistono entrambe vale quella di `RegoleCodiciXML`. L'intestazione viene
+riconosciuta anche scritta in modo un po' diverso (`Priorita Match`, `Priorità Match`,
+`prioritamatch`): il confronto ignora maiuscole, spazi, underscore e accenti.
 
 #### Controlli sulla colonna
 
-Se la colonna `PrioritaMatch` esiste, la sezione `[6-bis]` verifica i valori e segnala:
+Se una delle due colonne esiste, la sezione `[6-bis]` verifica i valori e segnala:
 
 | `Stato` | Quando |
 |---|---|
-| `MANCANTE O NON VALIDA` | cella vuota, testo, zero, numero negativo o decimale |
+| `MANCANTE O NON VALIDA` | testo, zero, numero negativo o decimale (la cella **vuota non è un errore**) |
 | `DUPLICATA NELLO STESSO CFOR` | due **campi diversi** con lo stesso numero: l'ordine sarebbe ambiguo |
 | `PIU TIPI SULLO STESSO CAMPO` | due tipi dello stesso campo con priorità diverse: il pivot tiene un solo valore |
 
 Due tipi che puntano allo **stesso** campo con la **stessa** priorità sono invece legittimi (è il
 caso normale di `FORN` e `Descrizione` entrambi su `CODICE_FORNITORE` a `30`). Una priorità non
 valida non blocca nulla: quella riga semplicemente non partecipa all'ordine e il campo ricade sul
-default. Se la colonna **non** esiste, nessun valore viene segnalato: l'assenza è una scelta
-legittima, non un errore.
+default.
+
+#### Come verificare che sia stata letta
+
+La sezione `[6-bis]` stampa sempre da dove arriva la priorità e, per i fornitori configurati,
+l'**ordine effettivo** dei livelli:
+
+```
+Priorità letta da RegoleCodiciXML, colonna 'PrioritaMatch'.
+Ordine effettivo dei livelli (numero più basso = provato prima):
+  CFOR  CampoCanonico      Priorita  Origine
+  F011  CODICE_FORNITORE   10        dizionario
+  F011  CODICE_CLIENTE     90        dizionario
+  F011  EAN                10        storico
+```
+
+Se invece la colonna non è stata trovata, la stessa sezione lo dice esplicitamente — anche quando
+è finita in un foglio che il notebook non legge (`RegoleDDT`), che è l'errore più facile da fare.
+Senza questo controllo una priorità ignorata produce esattamente lo stesso output di una priorità
+che non serve.
 
 **Limite noto:** `EAN` ed `EAN13` sono due tipi diversi ma lo stesso campo canonico `EAN`, e il
 pivot ne tiene uno solo. La priorità non può distinguerli.

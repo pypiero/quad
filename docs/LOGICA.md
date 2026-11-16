@@ -109,6 +109,16 @@ lo stesso documento viene letto correttamente, senza toccare il codice.
 La priorità **non cambia quali codici si provano** e non tocca il pivot, che continua a tenere un
 valore per campo canonico. Cambia solo quale dei tre esiti vince quando ce ne sono più di uno.
 
+Due dettagli che decidono se una configurazione funziona:
+
+- **dichiarato batte default.** Una cella vuota non è una priorità: il campo ricade sullo storico.
+  Per questo la chiave di scelta separa i due casi — `priorità * 100 + classe + posizione`, con
+  classe `0` per i campi dichiarati e `10` per quelli in default — e un `FORN = 10` scritto a mano
+  vince sull'`EAN`, che vale `10` solo perché nessuno l'ha configurato;
+- **la colonna può stare anche su `RegoleCodiciCarico`**, dove la chiave è già `(CFOR, campo)`.
+  Vale solo se `RegoleCodiciXML` non ce l'ha. L'intestazione è riconosciuta anche con maiuscole,
+  spazi e accenti diversi, perché una colonna non letta non produce errori: produce silenzio.
+
 Entrambi i lati arrivano al confronto **normalizzati**: l'XML con la regola del foglio
 `RegoleCodiciXML`, i carichi con quella del foglio `RegoleCodiciCarico`. Sul lato carichi le chiavi
 si chiamano `CEAN_Chiave`, `CART_Chiave`, `CALA_Chiave`; i valori originali restano nelle colonne di
@@ -394,6 +404,11 @@ Funzioni:
   ogni campo si tiene il minimo fra i tipi che vi puntano. Chi non compare ricade su
   `PRIORITA_STORICA` (`EAN = 10`, `CODICE_CLIENTE = 20`, `CODICE_FORNITORE = 30`; campi
   sconosciuti a `90`);
+- `PrioritaDichiarate` è l'insieme dei campi davvero scritti nel dizionario: serve a distinguere
+  una priorità voluta da un default con lo stesso numero;
+- `PrioritaOrigine` e `PrioritaColonna` dicono da quale foglio e con quale intestazione è stata
+  letta la colonna (`RegoleCodiciXML` oppure, se lì non c'è, `RegoleCodiciCarico`); `PrioritaAltrove`
+  elenca le colonne trovate nei fogli che non vengono usati;
 - `chiave_cfor` / `chiave_testo` normalizzano le chiavi (trim + maiuscolo);
 - `regola_codice_xml`, `regola_codice_carico`, `regola_ddt_xml`, `regola_ddt_carico` leggono una
   regola;
@@ -658,7 +673,13 @@ creato `ID_Riga_XML`.
 **2. Lato carichi.** Stessa cosa su `df_fatture` con `(CFOR, NDOGIAA, NDOGIAB_Chiave)`, chiave orfano
 se manca.
 
-**3. Tre lookup, un solo esito.** Una tabella di lookup per livello di codice:
+**3. Tre lookup, un solo esito.**
+
+> Nota: se la priorità non sembra avere effetto, il posto da guardare è la sezione `[6-bis]`, che
+> stampa l'ordine effettivo per i fornitori configurati. Una colonna nel foglio sbagliato o con
+> un'intestazione diversa viene segnalata lì.
+
+ Una tabella di lookup per livello di codice:
 
 ```
 (CFOR, NDOGIAA, ChiaveDDT_ComuneCarico, EAN)  → Indice minimo + numero di righe
@@ -671,9 +692,11 @@ più righe compatibili sullo stesso livello si prende **l'`Indice` più basso**,
 deterministico. Poi si sceglie il livello con `PrioritaCampi[(CFOR, campo)]` più basso, usando
 l'ordine storico come default: `EAN → CART → CALA`.
 
-Nell'implementazione ogni esito riceve una chiave numerica `priorità * 10 + posizione` (la
-posizione storica rompe i pareggi) e si prende il minimo per riga, con una colonna sentinella a
-`inf` per le righe che non hanno nessun esito. `TipoMatch` riporta il livello vincente e
+Nell'implementazione ogni esito riceve una chiave numerica
+`priorità * 100 + classe + posizione`: la posizione storica rompe i pareggi e la classe (`0` =
+dichiarata, `10` = default) fa vincere una priorità scritta su un campo lasciato allo storico.
+Si prende il minimo per riga, con una colonna sentinella a `inf` per le righe che non hanno nessun
+esito. `TipoMatch` riporta il livello vincente e
 `ID_Riga_Ordine` viene ripreso **dalla colonna del livello vincente**; i contatori `NumeroMatch*`
 degli esiti non scelti vengono svuotati.
 

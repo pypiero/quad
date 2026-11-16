@@ -198,17 +198,20 @@ XML_FILES = {
         linea(1, "1234 magnesio 500mg", 5, 2.00, 10.00, "PZ",
               codici=[("MINSAN", "030999888")]),
     ),
-    # F011: due strade di abbinamento per la stessa riga.
+    # F011: tre strade di abbinamento per la stessa riga.
     #   - la descrizione produce il codice cliente 7777, che
     #     esiste nei carichi (articolo sbagliato);
+    #   - l'EAN punta allo stesso articolo sbagliato 7777;
     #   - il codice fornitore ART-300 abbina l'articolo giusto.
-    # Con PrioritaMatch il fornitore viene prima del cliente e
-    # vince l'articolo giusto; senza priorita' vince il CART.
+    # L'EAN e' senza PrioritaMatch: resta al default storico (10),
+    # che e' lo stesso numero con cui si dichiara il fornitore. La
+    # priorita' scritta a mano deve vincere comunque.
     "IT11111111111_00080.xml": xml_documento(
         "00080", "2024-12-31",
         ddt("Q/80", "2024-12-28", [1]),
         linea(1, "7777 prodotto generico", 4, 3.00, 12.00, "PZ",
-              codici=[("FORN", "ART-300"), ("MINSAN", "030777666")]),
+              codici=[("EAN", "8007777000000"), ("FORN", "ART-300"),
+                      ("MINSAN", "030777666")]),
     ),
     # Non FPR12: va scartato in lettura.
     "IT04444444444_00011.xml": xml_documento(
@@ -446,6 +449,11 @@ DIZIONARIO = {
          "CodiceTipoXML": "Descrizione",
          "CampoCanonico": "CODICE_CLIENTE",
          "RegolaNormalizzazione": "ESTRAI_PRIMA_STRINGA"},
+        # F011 manda anche un EAN, che pero' punta all'articolo
+        # sbagliato: resta senza priorita' dichiarata.
+        {"CFOR": "F011", "Denominazione": "undici", "CodiceTipoXML": "EAN",
+         "CampoCanonico": "EAN",
+         "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
         # F009: regola presente solo sul lato XML. Il lato carichi non
         # ha la riga e ricade sul default, quindi le due chiavi non
         # coincidono: la diagnostica deve segnalarlo.
@@ -528,3 +536,10 @@ DIZIONARIO["RegoleCodiciXML"].loc[
     & (DIZIONARIO["RegoleCodiciXML"]["CodiceTipoXML"] == "Descrizione"),
     "PrioritaMatch",
 ] = 90
+
+# L'EAN di F011 non e' configurato: resta vuoto (ordine storico).
+DIZIONARIO["RegoleCodiciXML"].loc[
+    (DIZIONARIO["RegoleCodiciXML"]["CFOR"] == "F011")
+    & (DIZIONARIO["RegoleCodiciXML"]["CodiceTipoXML"] == "EAN"),
+    "PrioritaMatch",
+] = None

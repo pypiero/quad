@@ -53,7 +53,7 @@ il test si adegua da solo.
 
 | File | Contenuto |
 |---|---|
-| `dati_sintetici.py` | XML, carichi, anagrafiche e dizionario (il fornitore `F005` ha il codice articolo scritto dentro la descrizione; il fornitore `F011` usa `PrioritaMatch` per far vincere il codice fornitore sulla descrizione) |
+| `dati_sintetici.py` | XML, carichi, anagrafiche e dizionario (il fornitore `F005` ha il codice articolo scritto dentro la descrizione; il fornitore `F011` usa `PrioritaMatch` per far vincere il codice fornitore su EAN e descrizione) |
 | `harness.py` | esecuzione del notebook con i sostituti sopra |
 | `verifica.py` | i controlli veri e propri, con il riepilogo |
 
@@ -79,10 +79,12 @@ il test si adegua da solo.
     a ogni linea e un codice vero prevale su di essa nello stesso campo; un `CodiceTipoXML` assente
     dal dizionario non entra nella tabella dei codici;
 13. **Priorità dei codici** — `PrioritaMatch` cambia il livello vincente (il fornitore `F011` passa
-    da `CART` a `CALA` e trova l'articolo giusto), senza colonna resta l'ordine storico, e le
-    anomalie (priorità mancante/non valida/duplicata, due tipi sullo stesso campo con priorità
-    diverse) vengono segnalate senza bloccare. Verifica anche che `Codice articolo interno` prenda
-    il valore dal carico e usi l'XML solo come ripiego;
+    a `CALA` e trova l'articolo giusto anche quando l'EAN, lasciato al default, punterebbe altrove);
+    senza colonna resta l'ordine storico; la colonna funziona anche scritta come `Priorita Match` o
+    messa sul foglio `RegoleCodiciCarico`; le anomalie (valore non valido, priorità duplicata, due
+    tipi sullo stesso campo con priorità diverse) vengono segnalate senza bloccare, mentre una
+    cella vuota è un campo non configurato e non produce avvisi. Verifica anche che
+    `Codice articolo interno` prenda il valore dal carico e usi l'XML solo come ripiego;
 14. **Export** — file creati e tipo delle celle nell'xlsx (date, numeri, testo).
 
 ## Provare il test contro un'altra versione del notebook
