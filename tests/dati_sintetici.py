@@ -198,6 +198,18 @@ XML_FILES = {
         linea(1, "1234 magnesio 500mg", 5, 2.00, 10.00, "PZ",
               codici=[("MINSAN", "030999888")]),
     ),
+    # F011: due strade di abbinamento per la stessa riga.
+    #   - la descrizione produce il codice cliente 7777, che
+    #     esiste nei carichi (articolo sbagliato);
+    #   - il codice fornitore ART-300 abbina l'articolo giusto.
+    # Con PrioritaMatch il fornitore viene prima del cliente e
+    # vince l'articolo giusto; senza priorita' vince il CART.
+    "IT11111111111_00080.xml": xml_documento(
+        "00080", "2024-12-31",
+        ddt("Q/80", "2024-12-28", [1]),
+        linea(1, "7777 prodotto generico", 4, 3.00, 12.00, "PZ",
+              codici=[("FORN", "ART-300"), ("MINSAN", "030777666")]),
+    ),
     # Non FPR12: va scartato in lettura.
     "IT04444444444_00011.xml": xml_documento(
         "11", "2024-05-02", "",
@@ -311,7 +323,20 @@ CARICHI = pd.DataFrame([
             CEAS="IT07777777777_00040",
             **{"Qtà": 5, "Importo_ns_fattura": 10.00, "PF02IAL": 2.00,
                "QTA ORDINE": 5, "QTA ACCETT": 5}),
-    # fuori perimetro: tipo documento diverso da 60I
+    # carichi F011: la riga 1 si raggiunge solo dal CART 7777,
+    # la riga 2 solo dal codice fornitore ART-300
+    _carico(CFOR="F011", NDOGIAA="00080", TDATIAA="2024-12-31",
+            NDOGIAB="Q-80", TDATIAB="2024-12-28", CART="7777",
+            XART="prodotto generico (sbagliato)", CALA="ART-777",
+            CEAS="IT11111111111_00080",
+            **{"Qtà": 1, "Importo_ns_fattura": 3.00, "PF02IAL": 3.00,
+               "QTA ORDINE": 1, "QTA ACCETT": 1}),
+    _carico(CFOR="F011", NDOGIAA="00080", TDATIAA="2024-12-31",
+            NDOGIAB="Q-80", TDATIAB="2024-12-28", CART="C300",
+            XART="prodotto generico (giusto)", CALA="ART-300",
+            CEAS="IT11111111111_00080",
+            **{"Qtà": 4, "Importo_ns_fattura": 12.00, "PF02IAL": 3.00,
+               "QTA ORDINE": 4, "QTA ACCETT": 4}),
     _carico(CFOR="F009", NDOGIAA="999", TDATIAA="2024-01-01",
             NDOGIAB="Q/1", TDATIAB="2024-01-01", CART="C009",
             XART="FUORI PERIMETRO", CALA="ART-009", CDOCIAA="99X",
@@ -337,6 +362,8 @@ EAN = pd.DataFrame([
     {"CART": "C005", "SBAR": "EAN", "CEAN": "8005555555555"},
     {"CART": "C006", "SBAR": "EAN", "CEAN": "8006666666666"},
     {"CART": "C007", "SBAR": "EAN", "CEAN": "8007777777777"},
+    {"CART": "7777", "SBAR": "EAN", "CEAN": "8007777000000"},
+    {"CART": "C300", "SBAR": "EAN", "CEAN": "8003000000000"},
 ])
 
 CARF = pd.DataFrame([
@@ -357,12 +384,25 @@ CARF = pd.DataFrame([
      "CARF": "ART-006", "XARF": "RESO"},
     {"CART": "C007", "CFOR": "F005", "TDEC": "2024-01-01",
      "CARF": "ART-222", "XARF": "RICOTTA GR 500"},
+    {"CART": "7777", "CFOR": "F011", "TDEC": "2024-01-01",
+     "CARF": "ART-777", "XARF": "PRODOTTO SBAGLIATO"},
+    {"CART": "C300", "CFOR": "F011", "TDEC": "2024-01-01",
+     "CARF": "ART-300", "XARF": "PRODOTTO GIUSTO"},
 ])
 
 
 # ------------------------------------------------------------------
 # DIZIONARIO DELLE REGOLE
 # ------------------------------------------------------------------
+
+# PrioritaMatch: senza la colonna l'ordine sarebbe quello storico
+# (EAN -> CART -> CALA). Qui viene scritta per tutti, con i valori
+# storici, tranne dove il test vuole un ordine diverso.
+PRIORITA_XML_STORICA = {
+    "EAN": 10,
+    "CODICE_CLIENTE": 20,
+    "CODICE_FORNITORE": 30,
+}
 
 DIZIONARIO = {
     "RegoleCodiciXML": pd.DataFrame([
@@ -397,6 +437,15 @@ DIZIONARIO = {
          "CodiceTipoXML": "Descrizione",
          "CampoCanonico": "CODICE_CLIENTE",
          "RegolaNormalizzazione": "ESTRAI_PRIMA_STRINGA"},
+        # F011: il codice fornitore deve essere provato prima del
+        # codice cliente ricavato dalla descrizione
+        {"CFOR": "F011", "Denominazione": "undici", "CodiceTipoXML": "FORN",
+         "CampoCanonico": "CODICE_FORNITORE",
+         "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
+        {"CFOR": "F011", "Denominazione": "undici",
+         "CodiceTipoXML": "Descrizione",
+         "CampoCanonico": "CODICE_CLIENTE",
+         "RegolaNormalizzazione": "ESTRAI_PRIMA_STRINGA"},
         # F009: regola presente solo sul lato XML. Il lato carichi non
         # ha la riga e ricade sul default, quindi le due chiavi non
         # coincidono: la diagnostica deve segnalarlo.
@@ -428,6 +477,12 @@ DIZIONARIO = {
         {"CFOR": "F006", "Denominazione": "sei",
          "CampoCanonico": "CODICE_CLIENTE",
          "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
+        {"CFOR": "F011", "Denominazione": "undici",
+         "CampoCanonico": "CODICE_CLIENTE",
+         "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
+        {"CFOR": "F011", "Denominazione": "undici",
+         "CampoCanonico": "CODICE_FORNITORE",
+         "RegolaNormalizzazione": "RIMUOVI_SEPARATORI"},
         # refuso voluto: CODICE_FORNTORE invece di CODICE_FORNITORE.
         # La regola non deve essere applicata, ma il campo va segnalato.
         {"CFOR": "F003", "Denominazione": "tre",
@@ -446,5 +501,30 @@ DIZIONARIO = {
         {"CFOR": "F006", "Denominazione": "sei",
          "RegolaDDTXML": "RIMUOVI_SEPARATORI",
          "RegolaDDTCarico": "RIMUOVI_SEPARATORI"},
+        {"CFOR": "F011", "Denominazione": "undici",
+         "RegolaDDTXML": "RIMUOVI_SEPARATORI",
+         "RegolaDDTCarico": "RIMUOVI_SEPARATORI"},
     ]),
 }
+
+
+# ------------------------------------------------------------------
+# PRIORITÀ DEI CODICI (colonna PrioritaMatch)
+# ------------------------------------------------------------------
+# I valori storici per tutti, così il comportamento base non cambia;
+# F011 vuole l'ordine opposto per provare che la colonna conta.
+DIZIONARIO["RegoleCodiciXML"]["PrioritaMatch"] = (
+    DIZIONARIO["RegoleCodiciXML"]["CampoCanonico"].map(PRIORITA_XML_STORICA)
+)
+
+DIZIONARIO["RegoleCodiciXML"].loc[
+    (DIZIONARIO["RegoleCodiciXML"]["CFOR"] == "F011")
+    & (DIZIONARIO["RegoleCodiciXML"]["CodiceTipoXML"] == "FORN"),
+    "PrioritaMatch",
+] = 10
+
+DIZIONARIO["RegoleCodiciXML"].loc[
+    (DIZIONARIO["RegoleCodiciXML"]["CFOR"] == "F011")
+    & (DIZIONARIO["RegoleCodiciXML"]["CodiceTipoXML"] == "Descrizione"),
+    "PrioritaMatch",
+] = 90

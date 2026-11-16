@@ -121,7 +121,7 @@ lato carico sono configurati separatamente perché hanno granularità diverse.
 
 | Foglio | Chiave | Contenuto |
 |---|---|---|
-| `RegoleCodiciXML` | `CFOR` + `CodiceTipoXML` | → `CampoCanonico`, `RegolaNormalizzazione` |
+| `RegoleCodiciXML` | `CFOR` + `CodiceTipoXML` | → `CampoCanonico`, `RegolaNormalizzazione`, `PrioritaMatch` (facoltativa) |
 | `RegoleCodiciCarico` | `CFOR` + `CampoCanonico` | → `RegolaNormalizzazione` |
 | `RegoleDDT` | `CFOR` | → `RegolaDDTXML`, `RegolaDDTCarico` |
 
@@ -149,6 +149,56 @@ Le regole sono definite in **un unico registro** nella sezione `[4]`: ogni voce 
 funzione e a una descrizione, e la tabella viene stampata a runtime insieme al default. Per
 aggiungere o modificare una regola si tocca solo quel blocco — `normalizza()` e la diagnostica lo
 leggono da soli. Prima servivano tre modifiche in due punti diversi.
+
+### Ordine dei livelli articolo: `PrioritaMatch`
+
+La cascata `EAN → CART → CALA` è solo il default. Nel foglio `RegoleCodiciXML` la colonna
+**facoltativa** `PrioritaMatch` permette di dichiarare, fornitore per fornitore, quale livello
+provare per primo:
+
+| `CFOR` | `CodiceTipoXML` | `CampoCanonico` | `RegolaNormalizzazione` | `PrioritaMatch` |
+|---|---|---|---|---|
+| `F011` | `FORN` | `CODICE_FORNITORE` | `RIMUOVI_SEPARATORI` | `10` |
+| `F011` | `Descrizione` | `CODICE_FORNITORE` | `ESTRAI_ULTIMA_STRINGA` | `90` |
+| `F011` | `CLI` | `CODICE_CLIENTE` | `RIMUOVI_SEPARATORI` | *(vuota)* |
+
+Le regole sono poche e valgono per tutte le righe del notebook:
+
+- **vince il numero più basso.** La priorità è un intero positivo: `10` prima di `20`, `20` prima
+  di `30`;
+- **la priorità appartiene al campo canonico, non al tipo.** Il campo `CODICE_FORNITORE` vale il
+  **minimo** fra i tipi che vi puntano: con `FORN = 10` e `Descrizione = 90` è `10`, quindi il
+  codice fornitore vero precede la descrizione;
+- **chi non ha priorità ricade sull'ordine storico**: `EAN = 10`, `CODICE_CLIENTE = 20`,
+  `CODICE_FORNITORE = 30` (i campi sconosciuti finiscono in fondo). Se la colonna non esiste
+  proprio, o una cella è vuota, si applica questo default: **il comportamento storico resta quello
+  di chi non configura nulla**;
+- **la priorità non cambia quali codici si provano**, cambia solo **quale esito vince** quando una
+  riga trova un match a più livelli. I tre lookup restano indipendenti e vengono tutti eseguiti.
+
+Esempio (fornitore `F011`): la stessa riga XML è raggiungibile sia dalla descrizione — che produce
+un `CART` sbagliato — sia dal codice fornitore, che è quello giusto. Con la colonna assente il
+report mostra il livello `CART`; con `FORN = 10` e `Descrizione = 90` lo stesso documento mostra
+`CALA` e l'articolo corretto.
+
+#### Controlli sulla colonna
+
+Se la colonna `PrioritaMatch` esiste, la sezione `[6-bis]` verifica i valori e segnala:
+
+| `Stato` | Quando |
+|---|---|
+| `MANCANTE O NON VALIDA` | cella vuota, testo, zero, numero negativo o decimale |
+| `DUPLICATA NELLO STESSO CFOR` | due **campi diversi** con lo stesso numero: l'ordine sarebbe ambiguo |
+| `PIU TIPI SULLO STESSO CAMPO` | due tipi dello stesso campo con priorità diverse: il pivot tiene un solo valore |
+
+Due tipi che puntano allo **stesso** campo con la **stessa** priorità sono invece legittimi (è il
+caso normale di `FORN` e `Descrizione` entrambi su `CODICE_FORNITORE` a `30`). Una priorità non
+valida non blocca nulla: quella riga semplicemente non partecipa all'ordine e il campo ricade sul
+default. Se la colonna **non** esiste, nessun valore viene segnalato: l'assenza è una scelta
+legittima, non un errore.
+
+**Limite noto:** `EAN` ed `EAN13` sono due tipi diversi ma lo stesso campo canonico `EAN`, e il
+pivot ne tiene uno solo. La priorità non può distinguerli.
 
 ### Un tipo di codice conta solo se è nel dizionario
 
@@ -290,14 +340,17 @@ restano intatte; sul lato XML le colonne dei codici del report contengono il val
 grezzo resta nel foglio diagnostico `df_xml_codici_articolo`. Il confronto usa `CEAN_Chiave`,
 `CART_Chiave`, `CALA_Chiave` sul lato carichi e i valori normalizzati sul lato XML.
 
-Per ogni riga XML si cercano le righe carico compatibili con una cascata di tre livelli:
+Per ogni riga XML si cercano le righe carico compatibili su tre livelli:
 
 ```
 EAN  →  CART (codice articolo cliente)  →  CALA/CARF (codice articolo fornitore)
 ```
 
-Il primo livello che trova qualcosa vince, e fra più righe compatibili si prende quella con
-`Indice` più basso. Il tipo di match finisce nella colonna `TipoMatch`.
+I tre livelli vengono provati **tutti**, in modo indipendente; poi si sceglie **un solo** esito.
+L'ordine di scelta è quello dichiarato in `PrioritaMatch` per quel fornitore, con
+`EAN → CART → CALA` come default (vedi §4). Fra più righe compatibili sullo stesso livello si
+prende quella con `Indice` più basso. Il livello vincente finisce nella colonna `TipoMatch`, e
+`ID_Riga_Ordine` viene ripreso dall'esito scelto.
 
 Infine il **full outer** fra lato XML e lato carichi su `Indice`: le righe XML che non trovano
 nulla restano `Solo XML`, le righe carico non raggiunte restano `Solo carico`.
@@ -400,6 +453,12 @@ quello del gestionale (es. `Fattura` = numero XML, altrimenti `NDOGIAA`; `Data b
 altrimenti `DataDDT_XML`, altrimenti `TDATIAB`). `Denominazione` viene propagata a tutte le righe
 dello stesso fornitore, anche quelle `Solo carico`.
 
+L'unica eccezione è **`Codice articolo interno`**: vince il dato del **carico**
+(`mersy_articolo(CART)`), e solo in mancanza si usa il codice cliente dell'XML
+(`Codice Art. Cliente`). È l'ordine opposto rispetto alle altre colonne, ed è voluto: il codice
+interno del gestionale è quello che il report deve mostrare, l'XML serve solo come ripiego per le
+righe `Solo XML`.
+
 ---
 
 ## 8. Tipi di dato nel file Excel
@@ -460,6 +519,8 @@ Dettagli in [`tests/README.md`](tests/README.md).
   fornitore, che in quel caso manca. Il caso è oggi considerato non significativo — si assume che
   ogni fattura abbia almeno un carico — ma è documentato nella cella del report insieme alle
   possibili strade, se in futuro non fosse più vero.
+- `EAN` ed `EAN13` mappano sullo stesso campo canonico e il pivot ne conserva uno solo: la
+  colonna `PrioritaMatch` non li può distinguere.
 - `RiferimentoAmministrazione` e `Descrizione` sono tipi virtuali trattati come normali
   `CodiceArticolo`: partecipano solo se il dizionario li codifica per quel fornitore. Un
   trattamento dedicato va deciso.
