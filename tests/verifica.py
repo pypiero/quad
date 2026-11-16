@@ -10,13 +10,18 @@ Non richiede Fabric, OneLake né i file Excel di origine: servono
 solo pandas e openpyxl.
 """
 
+import contextlib
+import io
+import json
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 
 import openpyxl
 import pandas as pd
 
+import dati_sintetici
 import harness
 
 ESITI = []
@@ -226,7 +231,7 @@ def verifica_merge(df_merge):
 
     controlla(
         "righe carico senza riscontro XML -> Solo carico",
-        len(solo_carico) == 4
+        len(solo_carico) == 5
         and "ARTICOLO EXTRA"
         in set(solo_carico["mersy_descrizione_articolo(XART)"]),
         str(solo_carico[["mersy_descrizione_articolo(XART)"]].to_dict("records")),
@@ -241,19 +246,19 @@ def verifica_merge(df_merge):
         "Senza DDT" in set(df_merge["NumeroDDT_Comune"]),
     )
     controlla(
-        "merge senza duplicati (19 righe)",
-        len(df_merge) == 19,
+        "merge senza duplicati (21 righe)",
+        len(df_merge) == 21,
         str(len(df_merge)),
     )
     controlla(
         "ogni riga XML compare una volta sola",
-        int(df_merge["ID_Riga_XML"].notna().sum()) == 15
+        int(df_merge["ID_Riga_XML"].notna().sum()) == 16
         and df_merge["ID_Riga_XML"].dropna().is_unique,
         str(int(df_merge["ID_Riga_XML"].notna().sum())),
     )
     controlla(
         "ogni riga carico compare una volta sola",
-        int(df_merge["Indice"].notna().sum()) == 13
+        int(df_merge["Indice"].notna().sum()) == 15
         and df_merge["Indice"].dropna().is_unique,
         str(int(df_merge["Indice"].notna().sum())),
     )
@@ -713,7 +718,7 @@ def verifica_perimetro(df_fatture):
 
     controlla(
         "filtro CDOCIAA: 60I e 60C nel perimetro",
-        len(df_fatture) == 13,
+        len(df_fatture) == 15,
         f"righe nel perimetro: {len(df_fatture)}",
     )
     controlla(
@@ -822,7 +827,7 @@ def verifica_descrizione_codice(df_xml_fatture, df_xml_codici_articolo,
 
     controlla(
         "la descrizione vale solo per i fornitori che la codificano",
-        fornitori_descrizione == ["F005", "F006"],
+        fornitori_descrizione == ["F005", "F006", "F011"],
         str(fornitori_descrizione),
     )
 
@@ -886,8 +891,316 @@ def verifica_descrizione_codice(df_xml_fatture, df_xml_codici_articolo,
     )
 
 
+def esegui_con_dizionario(modifica):
+    """
+    Esegue il notebook con una copia modificata del dizionario.
+
+    Serve ai controlli sulle anomalie di PrioritaMatch, che
+    richiedono configurazioni sbagliate: la modifica vale solo per
+    l'esecuzione e il dizionario originale viene ripristinato.
+    """
+
+    originale = dati_sintetici.DIZIONARIO
+
+    copia = {nome: tabella.copy() for nome, tabella in originale.items()}
+
+    modifica(copia)
+
+    dati_sintetici.DIZIONARIO = copia
+
+    try:
+        return harness.esegui_notebook()
+    finally:
+        dati_sintetici.DIZIONARIO = originale
+
+
+def anomalie_priorita(dizionari):
+    """Stati delle anomalie che riguardano PrioritaMatch."""
+
+    anomalie = dizionari["Anomalie"]
+
+    if anomalie.empty:
+        return []
+
+    return anomalie.loc[
+        anomalie["Colonna"] == "PrioritaMatch", "Stato"
+    ].tolist()
+
+
+def verifica_priorita(df_merge, df_powerbi, dizionari):
+    titolo(14, "PRIORITÀ DEI CODICI E CODICE ARTICOLO INTERNO")
+
+    priorita = dizionari["PrioritaCampi"]
+
+    print("Priorità dei campi canonici di F011:")
+    print({
+        campo: valore
+        for (cfor, campo), valore in priorita.items()
+        if cfor == "F011"
+    })
+
+    controlla(
+        "PrioritaMatch: il fornitore (10) viene prima del cliente (90)",
+        priorita.get(("F011", "CODICE_FORNITORE")) == 10
+        and priorita.get(("F011", "CODICE_CLIENTE")) == 90,
+        str({(c, camp): v for (c, camp), v in priorita.items() if c == "F011"}),
+    )
+
+    riga = df_merge.loc[
+        (df_merge["NumeroFattura"] == "00080")
+        & (df_merge["StatoAbbinamento"] == "Abbinato")
+    ]
+
+    controlla(
+        "la priorità ribalta l'esito: vince CALA, non CART né EAN",
+        len(riga) == 1 and riga["TipoMatch"].iloc[0] == "CALA",
+        str(riga[["TipoMatch", "StatoAbbinamento"]].to_dict("records")),
+    )
+
+    # L'EAN di F011 non ha PrioritaMatch e resta al default 10, lo
+    # stesso numero con cui è dichiarato il fornitore: la priorità
+    # scritta a mano deve vincere comunque.
+    controlla(
+        "una priorità dichiarata batte un default con lo stesso numero",
+        ("F011", "CODICE_FORNITORE") in dizionari["PrioritaDichiarate"]
+        and ("F011", "EAN") not in dizionari["PrioritaDichiarate"],
+        str(sorted(dizionari["PrioritaDichiarate"])),
+    )
+
+    controlla(
+        "l'articolo agganciato è quello del codice fornitore",
+        len(riga) == 1
+        and riga["mersy_articolo_fornitore(CALA)"].iloc[0] == "ART-300",
+        str(riga["mersy_articolo_fornitore(CALA)"].tolist()),
+    )
+
+    # Il CART del carico (C300) deve battere il codice cliente XML
+    # (7777) sulla stessa riga: l'ordine del coalesce è invertito.
+    riga_report = df_powerbi.loc[df_powerbi["Fattura"] == "00080"]
+
+    controlla(
+        "Codice articolo interno: prima il CART dei carichi",
+        "C300" in set(riga_report["Codice articolo interno"].dropna()),
+        str(riga_report["Codice articolo interno"].tolist()),
+    )
+
+    controlla(
+        "nessuna anomalia PrioritaMatch con il dizionario corretto",
+        anomalie_priorita(dizionari) == [],
+        str(anomalie_priorita(dizionari)),
+    )
+
+    # ---- SENZA LA COLONNA: ORDINE STORICO -----------------------
+
+    def togli_priorita(copia):
+        copia["RegoleCodiciXML"] = copia["RegoleCodiciXML"].drop(
+            columns=["PrioritaMatch"]
+        )
+
+    senza = esegui_con_dizionario(togli_priorita)
+
+    riga_storica = senza["df_merge"].loc[
+        (senza["df_merge"]["NumeroFattura"] == "00080")
+        & (senza["df_merge"]["StatoAbbinamento"] == "Abbinato")
+    ]
+
+    controlla(
+        "senza PrioritaMatch resta l'ordine storico EAN -> CART -> CALA",
+        len(riga_storica) == 1
+        and riga_storica["TipoMatch"].iloc[0] == "EAN",
+        str(riga_storica[["TipoMatch"]].to_dict("records")),
+    )
+
+    controlla(
+        "senza colonna nessun campo risulta dichiarato",
+        senza["dizionari"]["PrioritaDichiarate"] == set(),
+        str(senza["dizionari"]["PrioritaDichiarate"]),
+    )
+
+    controlla(
+        "senza PrioritaMatch nessuna anomalia",
+        anomalie_priorita(senza["dizionari"]) == [],
+        str(anomalie_priorita(senza["dizionari"])),
+    )
+
+    # ---- VALIDAZIONI --------------------------------------------
+
+    def priorita_duplicata(copia):
+        tabella = copia["RegoleCodiciXML"]
+        # F011: fornitore 20 come il cliente della descrizione
+        posizione = tabella.index[
+            (tabella["CFOR"] == "F011")
+            & (tabella["CodiceTipoXML"] == "FORN")
+        ]
+        tabella.loc[posizione, "PrioritaMatch"] = 90
+
+    duplicata = esegui_con_dizionario(priorita_duplicata)
+
+    controlla(
+        "priorità duplicata per campi diversi segnalata",
+        any("DUPLICATA" in stato for stato in anomalie_priorita(duplicata["dizionari"])),
+        str(anomalie_priorita(duplicata["dizionari"])),
+    )
+
+    def priorita_non_valida(copia):
+        tabella = copia["RegoleCodiciXML"]
+        # la colonna nasce numerica: serve object per il testo
+        tabella["PrioritaMatch"] = tabella["PrioritaMatch"].astype(object)
+        posizione = tabella.index[
+            (tabella["CFOR"] == "F011")
+            & (tabella["CodiceTipoXML"] == "FORN")
+        ]
+        tabella.loc[posizione, "PrioritaMatch"] = "abc"
+
+    non_valida = esegui_con_dizionario(priorita_non_valida)
+
+    controlla(
+        "PrioritaMatch non numerica segnalata",
+        any(
+            "MANCANTE O NON VALIDA" in stato
+            for stato in anomalie_priorita(non_valida["dizionari"])
+        ),
+        str(anomalie_priorita(non_valida["dizionari"])),
+    )
+
+    def priorita_zero(copia):
+        tabella = copia["RegoleCodiciXML"]
+        posizione = tabella.index[
+            (tabella["CFOR"] == "F011")
+            & (tabella["CodiceTipoXML"] == "FORN")
+        ]
+        tabella.loc[posizione, "PrioritaMatch"] = 0
+
+    zero = esegui_con_dizionario(priorita_zero)
+
+    controlla(
+        "PrioritaMatch zero segnalata",
+        any(
+            "MANCANTE O NON VALIDA" in stato
+            for stato in anomalie_priorita(zero["dizionari"])
+        ),
+        str(anomalie_priorita(zero["dizionari"])),
+    )
+
+    def priorita_vuota(copia):
+        tabella = copia["RegoleCodiciXML"]
+        posizione = tabella.index[
+            (tabella["CFOR"] == "F011")
+            & (tabella["CodiceTipoXML"] == "FORN")
+        ]
+        tabella.loc[posizione, "PrioritaMatch"] = None
+
+    vuota = esegui_con_dizionario(priorita_vuota)
+
+    riga_vuota = vuota["df_merge"].loc[
+        (vuota["df_merge"]["NumeroFattura"] == "00080")
+        & (vuota["df_merge"]["StatoAbbinamento"] == "Abbinato")
+    ]
+
+    # La colonna è facoltativa: una cella vuota è un campo non
+    # configurato, non un errore. Quel campo ricade sull'ordine
+    # storico, che qui rimette davanti l'EAN.
+    controlla(
+        "PrioritaMatch vuota non è un'anomalia",
+        anomalie_priorita(vuota["dizionari"]) == [],
+        str(anomalie_priorita(vuota["dizionari"])),
+    )
+
+    controlla(
+        "il campo senza priorità ricade sull'ordine storico",
+        len(riga_vuota) == 1 and riga_vuota["TipoMatch"].iloc[0] == "EAN",
+        str(riga_vuota[["TipoMatch"]].to_dict("records")),
+    )
+
+    def due_tipi_stesso_campo(copia):
+        tabella = copia["RegoleCodiciXML"]
+        posizione = tabella.index[
+            (tabella["CFOR"] == "F005")
+            & (tabella["CodiceTipoXML"] == "Descrizione")
+        ]
+        tabella.loc[posizione, "PrioritaMatch"] = 40
+
+    stesso_campo = esegui_con_dizionario(due_tipi_stesso_campo)
+
+    controlla(
+        "due tipi sullo stesso campo con priorità diverse: segnalato",
+        any(
+            "STESSO CAMPO" in stato
+            for stato in anomalie_priorita(stesso_campo["dizionari"])
+        ),
+        str(anomalie_priorita(stesso_campo["dizionari"])),
+    )
+
+
+def verifica_dettaglio_match(percorso_notebook):
+    """
+    Il dettaglio attivato da CFOR_VERIFICA_MATCH non deve rompere
+    nulla e deve mostrare i tre livelli, il livello scelto e
+    l'articolo che ne esce.
+    """
+
+    titolo(15, "DETTAGLIO DELL'ABBINAMENTO ARTICOLO (cella [15])")
+
+    with open(percorso_notebook, encoding="utf-8") as file:
+        notebook = json.load(file)
+
+    celle = ["".join(cella["source"]) for cella in notebook["cells"]]
+
+    sorgente = celle[0]
+    modificato = sorgente.replace(
+        "CFOR_VERIFICA_MATCH = []",
+        'CFOR_VERIFICA_MATCH = ["F011"]',
+    )
+
+    controlla(
+        "la costante CFOR_VERIFICA_MATCH è raggiungibile dal test",
+        modificato != sorgente,
+        "costante non trovata nel notebook",
+    )
+
+    if modificato == sorgente:
+        return
+
+    notebook["cells"][0]["source"] = modificato.splitlines(keepends=True)
+
+    cartella = tempfile.mkdtemp(prefix="quad_dettaglio_")
+    percorso = Path(cartella) / "notebook.ipynb"
+
+    with open(percorso, "w", encoding="utf-8") as file:
+        json.dump(notebook, file, ensure_ascii=False)
+
+    # l'esecuzione del notebook stampa molto: qui interessa solo il
+    # DataFrame che produce
+    with contextlib.redirect_stdout(io.StringIO()):
+        namespace = harness.esegui_notebook(percorso_notebook=percorso)
+
+    dettaglio = namespace["df_verifica_match"]
+
+    controlla(
+        "il dettaglio viene prodotto per il fornitore indicato",
+        len(dettaglio) == 1 and dettaglio["CFOR"].iloc[0] == "F011",
+        str(dettaglio[["CFOR"]].to_dict("records")),
+    )
+
+    controlla(
+        "il dettaglio dice quali livelli trovano una riga",
+        bool(dettaglio["TrovaEAN"].iloc[0])
+        and bool(dettaglio["TrovaCART"].iloc[0])
+        and bool(dettaglio["TrovaCALA"].iloc[0]),
+        str(dettaglio[["TrovaEAN", "TrovaCART", "TrovaCALA"]].to_dict("records")),
+    )
+
+    controlla(
+        "il dettaglio riporta il livello scelto e l'articolo abbinato",
+        dettaglio["TipoMatch"].iloc[0] == "CALA"
+        and dettaglio["CALA"].iloc[0] == "ART-300"
+        and dettaglio["CART"].iloc[0] == "C300",
+        str(dettaglio[["TipoMatch", "CART", "CALA"]].to_dict("records")),
+    )
+
+
 def verifica_export(cartella_output, df_powerbi, namespace):
-    titolo(14, "EXPORT E TIPI DELLE CELLE (celle [16])")
+    titolo(16, "EXPORT E TIPI DELLE CELLE (celle [16])")
 
     for nome in ("riconciliazione.xlsx", "riconciliazione_powerbi.xlsx"):
         controlla(
@@ -1069,7 +1382,7 @@ def verifica_export(cartella_output, df_powerbi, namespace):
 
 
 def stampa_riepilogo():
-    titolo(15, "RIEPILOGO")
+    titolo(17, "RIEPILOGO")
 
     for nome, esito, dettaglio in ESITI:
         riga = ("PASS  " if esito else "FAIL  ") + nome
@@ -1113,6 +1426,13 @@ def main():
         namespace["df_xml_codici_articolo"],
         namespace["df_xml_righe"],
     )
+    verifica_priorita(
+        namespace["df_merge"],
+        namespace["df_powerbi"],
+        namespace["dizionari"],
+    )
+    verifica_dettaglio_match(harness.NOTEBOOK)
+
     verifica_export(
         namespace["_cartella_output"],
         namespace["df_powerbi"],

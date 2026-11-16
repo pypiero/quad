@@ -44,7 +44,7 @@ confrontare le misure. Le chiavi comuni sono tre, e sono l'intera architettura d
 
 1. **documento** → `CEAS + numero fattura` (nessuna normalizzazione: sono codici tecnici);
 2. **DDT** → numero normalizzato, con tre livelli di sicurezza (testo, data, residuo unico);
-3. **articolo** → cascata `EAN → CART → CALA`.
+3. **articolo** → ordine `EAN → CART → CALA`, ridefinibile per fornitore da `PrioritaMatch`.
 
 Il risultato è un **full outer**: non si perde nulla. Ogni riga racconta cosa è successo, e le
 colonne di stato dicono perché.
@@ -82,20 +82,37 @@ La normalizzazione è governata dal **dizionario**, fornitore per fornitore, e p
 `*_Chiave`. Se il confronto sul testo fallisce, si prova la **data**, e infine si sfrutta il fatto
 che in una fattura di solito c'è un solo DDT per lato.
 
-### 2.3 Articolo: cascata EAN → CART → CALA
+### 2.3 Articolo: ordine EAN → CART → CALA (default)
 
 L'XML può contenere più codici per la stessa riga, con tipi diversi (`EAN`, `FORN`, `CLI`, …). Il
 dizionario traduce ogni tipo in un **campo canonico** (`EAN`, `CODICE_CLIENTE`, `CODICE_FORNITORE`),
 cioè nel nome della colonna su cui confrontarlo. Sul lato carichi ci sono gli stessi tre campi:
 `CEAN`, `CART`, `CALA`.
 
-Il confronto procede a cascata: si usa il primo livello che trova qualcosa.
+I tre livelli si provano **tutti**, e poi se ne sceglie uno solo: quello con la priorità più bassa
+dichiarata nel dizionario per quel fornitore. In assenza di configurazione l'ordine è quello
+storico:
 
-| Livello | Lato XML | Lato carico | Note |
-|---|---|---|---|
-| 1 | `EAN` | `CEAN` | il più affidabile, quando c'è |
-| 2 | `CODICE_CLIENTE` | `CART` | codice interno, stabile |
-| 3 | `CODICE_FORNITORE` | `CALA` (da `CARF`) | ripiego, dipende dalla mappatura |
+| Livello | Lato XML | Lato carico | Priorità di default | Note |
+|---|---|---|---|---|
+| 1 | `EAN` | `CEAN` | `10` | il più affidabile, quando c'è |
+| 2 | `CODICE_CLIENTE` | `CART` | `20` | codice interno, stabile |
+| 3 | `CODICE_FORNITORE` | `CALA` (da `CARF`) | `30` | ripiego, dipende dalla mappatura |
+
+L'ordine è un **dato**, non un ramo del codice: la colonna `PrioritaMatch` del foglio
+`RegoleCodiciXML` assegna un intero positivo a ogni `(CFOR, CodiceTipoXML)` e il campo canonico
+eredita il minimo fra i tipi che vi puntano. Serve quando un fornitore scrive nella descrizione un
+codice che somiglia a un codice cliente: la descrizione produce un `CART` plausibile ma sbagliato,
+e il vero codice fornitore resterebbe dietro nella cascata. Con `FORN = 10` e `Descrizione = 90`
+lo stesso documento viene letto correttamente, senza toccare il codice.
+
+La priorità **non cambia quali codici si provano** e non tocca il pivot, che continua a tenere un
+valore per campo canonico. Cambia solo quale dei tre esiti vince quando ce ne sono più di uno.
+
+Un dettaglio decide se una configurazione funziona: **i campi scritti vengono prima di quelli
+lasciati al default**. La chiave di scelta è `priorità * 100 + classe + posizione`, con classe `0`
+per i campi dichiarati e `10` per gli altri; senza questo, un `FORN = 10` verrebbe battuto
+dall'`EAN`, che vale `10` solo perché nessuno l'ha configurato.
 
 Entrambi i lati arrivano al confronto **normalizzati**: l'XML con la regola del foglio
 `RegoleCodiciXML`, i carichi con quella del foglio `RegoleCodiciCarico`. Sul lato carichi le chiavi
@@ -293,10 +310,10 @@ Il progressivo alto serve al pivot: a parità di campo canonico vince il codice 
 basso, quindi un `CodiceArticolo` vero non viene mai scavalcato dalla descrizione nello stesso
 campo.
 
-Su campi diversi vale invece la gerarchia della chiave (`EAN → CART → FORN`): se la descrizione è
-mappata su `CODICE_CLIENTE` e la linea porta solo un codice fornitore, il `CART` ricavato dalla
-descrizione vince sul `FORN`. È la conseguenza diretta di trattare la descrizione come un codice
-qualsiasi, ed è accettata.
+Su campi diversi vale invece la gerarchia dei livelli (`EAN → CART → FORN`, salvo `PrioritaMatch`):
+se la descrizione è mappata su `CODICE_CLIENTE` e la linea porta solo un codice fornitore, il `CART`
+ricavato dalla descrizione vince sul `FORN`. È la conseguenza diretta di trattare la descrizione
+come un codice qualsiasi, ed è accettata — oppure si corregge con `PrioritaMatch`.
 
 
 Alla fine: conversione dei tipi (`DataFattura` e `DataDDT` a data, campi numerici a numero con
@@ -366,7 +383,7 @@ Tre fogli Excel, tre mappe in memoria.
 
 | Foglio | Chiave | Valore |
 |---|---|---|
-| `RegoleCodiciXML` | `(CFOR, CodiceTipoXML)` | `(CampoCanonico, regola)` |
+| `RegoleCodiciXML` | `(CFOR, CodiceTipoXML)` | `(CampoCanonico, regola, PrioritaMatch)` |
 | `RegoleCodiciCarico` | `(CFOR, CampoCanonico)` | `regola` |
 | `RegoleDDT` | `CFOR` | `(regola XML, regola carico)` |
 
@@ -377,7 +394,14 @@ Tre fogli Excel, tre mappe in memoria.
 Funzioni:
 
 - `prepara_dizionari(...)` costruisce le tre mappe e restituisce anche due DataFrame di diagnostica:
-  `Anomalie` (regole non riconosciute) e `ChiaviDuplicate`;
+  `Anomalie` (regole non riconosciute e priorità incoerenti) e `ChiaviDuplicate`;
+- `PrioritaCampi` è la mappa `(CFOR, CampoCanonico) → priorità` ricavata da `PrioritaMatch`: per
+  ogni campo si tiene il minimo fra i tipi che vi puntano. Chi non compare ricade su
+  `PRIORITA_STORICA` (`EAN = 10`, `CODICE_CLIENTE = 20`, `CODICE_FORNITORE = 30`; campi
+  sconosciuti a `90`);
+- `PrioritaDichiarate` è l'insieme dei campi davvero scritti nel dizionario: serve a distinguere
+  una priorità voluta da un default con lo stesso numero. Un valore non valido non entra
+  nell'insieme, quindi quel campo ricade sullo storico;
 - `chiave_cfor` / `chiave_testo` normalizzano le chiavi (trim + maiuscolo);
 - `regola_codice_xml`, `regola_codice_carico`, `regola_ddt_xml`, `regola_ddt_carico` leggono una
   regola;
@@ -642,7 +666,14 @@ creato `ID_Riga_XML`.
 **2. Lato carichi.** Stessa cosa su `df_fatture` con `(CFOR, NDOGIAA, NDOGIAB_Chiave)`, chiave orfano
 se manca.
 
-**3. Lookup in cascata.** Tre tabelle di lookup, una per livello di codice:
+**3. Tre lookup, un solo esito.**
+
+> Per capire cosa è successo su un fornitore basta metterlo in `CFOR_VERIFICA_MATCH` (cella `[1]`):
+> la stessa cella stampa una tabella con i tre codici, i livelli che hanno trovato una riga e
+> l'articolo abbinato. `ChiaveArticoloXML` non va guardata a questo scopo: nasce in `[13]` con
+> l'ordine fisso `EAN → CART → FORN` e serve solo a raggruppare le righe.
+
+ Una tabella di lookup per livello di codice:
 
 ```
 (CFOR, NDOGIAA, ChiaveDDT_ComuneCarico, EAN)  → Indice minimo + numero di righe
@@ -650,9 +681,18 @@ se manca.
 (..., CALA)                                  → idem
 ```
 
-Per ogni riga XML si prova prima `EAN`, poi `CART`, poi `CALA`; il primo che trova qualcosa
-determina `TipoMatch`. Fra più righe compatibili si prende **l'`Indice` più basso**, quindi il
-risultato è deterministico.
+I tre lookup vengono eseguiti **tutti**, riga per riga: una linea può avere più esiti validi. Fra
+più righe compatibili sullo stesso livello si prende **l'`Indice` più basso**, quindi il risultato è
+deterministico. Poi si sceglie il livello con `PrioritaCampi[(CFOR, campo)]` più basso, usando
+l'ordine storico come default: `EAN → CART → CALA`.
+
+Nell'implementazione ogni esito riceve una chiave numerica
+`priorità * 100 + classe + posizione` (la classe distingue i campi dichiarati dai default, la
+posizione rompe i pareggi) e si prende il minimo per riga, con una colonna sentinella a `inf` per
+le righe che non hanno nessun esito. Subito dopo la scelta il notebook stampa la ripartizione di
+`TipoMatch`: è il modo più rapido per vedere se una priorità ha spostato qualcosa. `TipoMatch` riporta il livello vincente e
+`ID_Riga_Ordine` viene ripreso **dalla colonna del livello vincente**; i contatori `NumeroMatch*`
+degli esiti non scelti vengono svuotati.
 
 **4. Lookup di contesto.** Servono a spiegare *perché* un abbinamento non è avvenuto:
 
@@ -746,7 +786,7 @@ opzionali, che potrebbero non esistere.
 | `Descrizione` | `Descrizione` | `mersy_descrizione_articolo(XART)` | `Descrizione non disponibile` |
 | `Numero riga fattura` | `NumeriLineaXML` | — | — (vuoto senza lato XML) |
 | `Unità di misura` | `UnitaMisura` | `mersy_um_prezzo(CUMF)` | — |
-| `Codice articolo interno` | `Codice Art. Cliente` | `mersy_articolo(CART)` | — |
+| `Codice articolo interno` | `mersy_articolo(CART)` | `Codice Art. Cliente` | — |
 | `Codice articolo fornitore` | `Codice Art. Fornitore` | `mersy_articolo_fornitore(CALA)` | — |
 | `Codice EAN` | `EAN` | `mersy_ean(CEAN)` | — |
 | `Quantità XML` | `Quantita` | — | — |
@@ -757,6 +797,14 @@ opzionali, che potrebbero non esistere.
 | `Totale XML` | `PrezzoTotale` | — | — |
 | `Totale Mersy` | `mersy_importo_ns_accettazione(Importo_ns_fattura)` | — | — |
 | `Differenza totali` | `Totale XML − Totale Mersy` (con il segno) | — | — |
+| `CPCO` | `mersy_punto_consegna(CPCO)` | — | — (vuoto senza carico) |
+| `CPCO descrizione` | `mersy_descrizione_punto_consegna(XPCO)` | — | — |
+| `Stato abbinamento` | `StatoAbbinamento` | — | — |
+
+**L'eccezione: `Codice articolo interno`.** È l'unica colonna in cui il **carico** vince sull'XML.
+L'ordine è `mersy_articolo(CART)` e solo in mancanza `Codice Art. Cliente`: il codice interno del
+gestionale è quello che il report deve mostrare, l'XML serve solo come ripiego per le righe
+`Solo XML`. Tutte le altre colonne seguono l'ordine opposto, prima l'XML e poi il gestionale.
 
 **Perché la differenza quantità usa i valori assoluti.** Una nota di credito ha quantità negative in
 Mersy mentre l'XML le riporta positive (o viceversa). Sottraendo i valori con segno, una riga `6`
@@ -769,9 +817,6 @@ si applica solo al calcolo della differenza. La stessa correzione **non** è sta
 `Differenza totali`, che continua a essere una sottrazione con il segno: se in futuro servirà lo
 stesso trattamento, è una riga sola, ma va deciso esplicitamente perché gli importi di una nota di
 credito possono avere segno opposto per motivi contabili e non solo per come è scritto il documento.
-| `CPCO` | `mersy_punto_consegna(CPCO)` | — | — (vuoto senza carico) |
-| `CPCO descrizione` | `mersy_descrizione_punto_consegna(XPCO)` | — | — |
-| `Stato abbinamento` | `StatoAbbinamento` | — | — |
 
 `CEAS`, `CPCO` e la sua descrizione arrivano **solo dal lato carichi**: sulle righe `Solo XML`
 restano vuote. È corretto: una bolla non ancora consegnata non ha punto di consegna, e nell'XML il
