@@ -204,7 +204,7 @@ XML_FILES = {
     #   - l'EAN punta allo stesso articolo sbagliato 7777;
     #   - il codice fornitore ART-300 abbina l'articolo giusto.
     # L'EAN e' senza PrioritaMatch: resta al default storico (10),
-    # che e' lo stesso numero con cui si dichiara il fornitore. La
+    # cioe' lo stesso numero con cui si dichiara il fornitore. La
     # priorita' scritta a mano deve vincere comunque.
     "IT11111111111_00080.xml": xml_documento(
         "00080", "2024-12-31",

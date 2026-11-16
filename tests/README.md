@@ -80,8 +80,7 @@ il test si adegua da solo.
     dal dizionario non entra nella tabella dei codici;
 13. **Priorità dei codici** — `PrioritaMatch` cambia il livello vincente (il fornitore `F011` passa
     a `CALA` e trova l'articolo giusto anche quando l'EAN, lasciato al default, punterebbe altrove);
-    senza colonna resta l'ordine storico; la colonna funziona anche scritta come `Priorita Match` o
-    messa sul foglio `RegoleCodiciCarico`; le anomalie (valore non valido, priorità duplicata, due
+    senza colonna resta l'ordine storico; le anomalie (valore non valido, priorità duplicata, due
     tipi sullo stesso campo con priorità diverse) vengono segnalate senza bloccare, mentre una
     cella vuota è un campo non configurato e non produce avvisi. Verifica anche che
     `Codice articolo interno` prenda il valore dal carico e usi l'XML solo come ripiego;
