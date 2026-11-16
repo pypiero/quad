@@ -90,7 +90,7 @@ Le 16 sezioni sono marcate da commenti `# %% [n]`.
 | 13 | Righe aggregate | `df_xml_righe` (1 riga per articolo dentro un DDT) |
 | 14 | Abbinamento DDT | `map_ddt` |
 | 15 | Merge finale | `df_merge` (full outer), chiave DDT derivata se l'XML non ha bolla |
-| 16 | Esportazione | `export/riconciliazione.xlsx`, 6 fogli |
+| 16 | Esportazione | `export/riconciliazione.xlsx`, un foglio (`df_merge`) |
 
 La seconda cella del notebook è un blocco aggiuntivo `[16]` che costruisce il dataset ridotto per
 il report e lo salva in `export/riconciliazione_powerbi.xlsx` (un solo foglio `df_merge`,
@@ -215,7 +215,7 @@ Una riga che resta senza codice continua a finire in `ChiaveArticoloXML` come `R
 con la natura (`SCONTO|n`): la descrizione non toglie mai la rete di sicurezza.
 
 Una regola scritta male o una cella vuota **non bloccano** l'esecuzione: si applica `RIMUOVI_SEPARATORI` e
-l'anomalia viene elencata nella diagnostica della sezione `[6]` (regole non riconosciute, chiavi
+l'anomalia viene elencata nella diagnostica della sezione `[6-bis]` (regole non riconosciute, chiavi
 duplicate). In caso di chiave duplicata vince la prima riga letta.
 
 ### Attenzione al default
@@ -354,16 +354,22 @@ riga va guardata a mano.
 
 ### `export/riconciliazione.xlsx` — diagnostica
 
-Sei fogli, uno per tabella:
+Di default **un solo foglio**, `df_merge`, il risultato del processo. Le altre tabelle sono
+disponibili ma vanno aggiunte a mano in `TABELLE_DA_ESPORTARE`:
 
 | Foglio | Contenuto |
 |---|---|
-| `df_merge` | il risultato del processo (full outer) |
+| `df_merge` | il risultato del processo (full outer) — esportato sempre |
 | `map_ddt` | abbinamento dei DDT fra i due lati |
 | `df_xml_righe` | lato XML alla granularità dell'articolo |
 | `df_fatture` | lato carichi nel perimetro |
 | `df_xml_fatture` | lato XML, una riga per linea |
 | `df_xml_codici_articolo` | lato XML, una riga per codice |
+
+Il motivo è il tempo: `df_merge` ha 82 colonne e scrivere Excel costa circa 1 secondo ogni 1.000
+righe **per foglio**. Misurato su 20.000 righe × 82 colonne: 6 fogli con `openpyxl` 124 s, un foglio
+23 s, un foglio con `xlsxwriter` 14 s. Il notebook usa `xlsxwriter` quando è disponibile e ricade su
+`openpyxl` altrimenti.
 
 ### `export/riconciliazione_powerbi.xlsx` — dataset per il report
 
