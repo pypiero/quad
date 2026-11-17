@@ -8,14 +8,14 @@ valori lato carico, con la differenza e lo stato dell'abbinamento.
 Il repository contiene:
 
 ```
-Notebook_2 (1).ipynb    tutto il processo (16 sezioni logiche in 2 celle)
+Notebook_2 (1).ipynb    tutto il processo (celle [1]–[17], ciascuna preceduta da Markdown)
 README.md               questo file
 docs/LOGICA.md          guida completa alla logica, cella per cella
 tests/                  test eseguibile su dati sintetici
 ```
 
 Per capire il codice in dettaglio, la guida di riferimento è [`docs/LOGICA.md`](docs/LOGICA.md):
-le tre chiavi del processo, le 16 sezioni una per una, le decisioni di progetto e come cercare un
+le tre chiavi del processo, le celle una per una, le decisioni di progetto e come cercare un
 errore.
 
 ---
@@ -71,30 +71,29 @@ Le righe che non superano il perimetro non compaiono nel risultato.
 
 ## 3. Struttura del notebook
 
-Le 16 sezioni sono marcate da commenti `# %% [n]`.
+Il notebook è suddiviso in 18 celle di codice separate (`[1]`–`[17]`, inclusa `[6-bis]`), ciascuna
+preceduta da una breve cella Markdown che ne descrive il ruolo, oltre a un'introduzione iniziale.
 
-| # | Sezione | Cosa produce |
+| # | Cella | Cosa produce |
 |---|---|---|
-| 1 | Configurazione e sorgenti | percorsi, nomi fogli, filtro documento |
-| 2 | Lettura XML dallo ZIP | `xml_in_memoria`, elenco errori per file |
+| 1 | Configurazione e sorgenti | librerie, percorsi, nomi fogli, filtro documento |
+| 2 | Lettura XML dallo ZIP | `xml_in_memoria`, `df_errori` |
 | 3 | Esplosione righe e codici | `df_xml_fatture` (1 riga per linea, con `DataDDT` e `Denominazione`), `df_xml_codici_articolo` (formato lungo) |
-| 4 | Normalizzazione | funzioni `normalizza()`, `valore_pulito()`, … |
-| 5 | Dizionari | mappe di lookup + diagnostica anomalie |
-| 6 | Diagnostica dizionario | blocco di sola lettura, rimovibile |
-| 7 | Carichi: lettura e tipi | `df_fatture` tipizzato e filtrato |
-| 8 | Carichi: perimetro | `df_fatture` ristretto alle fatture con XML, colonna `Indice` |
-| 9 | Anagrafiche | punti di consegna, EAN, CARF in `df_fatture` |
-| 10 | Chiave DDT e codici lato carichi | `NDOGIAB_Chiave`, `CEAN_Chiave`, `CART_Chiave`, `CALA_Chiave` |
-| 11 | CFOR e chiave DDT lato XML | `CFOR_XML`, `NumeroDDT_Chiave` |
-| 12 | Codici articolo normalizzati | `CampoCanonico` + `CodiceValoreNormalizzato` |
-| 13 | Righe aggregate | `df_xml_righe` (1 riga per articolo dentro un DDT) |
+| 4 | Funzioni di normalizzazione | registro `REGOLE`, funzioni `normalizza()`, `valore_pulito()`, … |
+| 5 | Dizionari e risoluzione delle regole | schema fogli, `prepara_dizionari()`, funzioni `normalizza_*` |
+| 6 | Lettura del dizionario | struttura `dizionari` (mappe di lookup + anomalie e duplicati) |
+| 6-bis | Diagnostica del dizionario *(opzionale)* | stampa di regole non riconosciute e chiavi duplicate, rimovibile |
+| 7 | Carichi: lettura, tipizzazione e filtro | `df_fatture` tipizzato e filtrato, costanti `COL_*` |
+| 8 | Carichi: perimetro XML e indice | `df_fatture` ristretto alle fatture con XML, colonna `Indice` |
+| 9 | Carichi: anagrafiche | punti di consegna, EAN, CARF (al posto di `CALA`) in `df_fatture` |
+| 10 | Carichi: chiavi di confronto | `NDOGIAB_Chiave`, `CEAN_Chiave`, `CART_Chiave`, `CALA_Chiave` |
+| 11 | XML: fornitore e chiave DDT | `CFOR_XML`, `NumeroDDT_Chiave` |
+| 12 | XML: codici articolo normalizzati | `CampoCanonico` + `CodiceValoreNormalizzato` (solo tipi codificati) |
+| 13 | XML: righe aggregate | `df_xml_righe` (1 riga per articolo dentro un DDT) |
 | 14 | Abbinamento DDT | `map_ddt` |
 | 15 | Merge finale | `df_merge` (full outer), chiave DDT derivata se l'XML non ha bolla |
-| 16 | Esportazione | `export/riconciliazione.xlsx`, un foglio (`df_merge`) |
-
-La seconda cella del notebook è un blocco aggiuntivo `[16]` che costruisce il dataset ridotto per
-il report e lo salva in `export/riconciliazione_powerbi.xlsx` (un solo foglio `df_merge`,
-26 colonne). È l'output pensato per il consumo da parte del report.
+| 16 | Esportazione completa | `export/riconciliazione.xlsx`, un foglio (`df_merge`, 82 colonne) |
+| 17 | Esportazione report Power BI | `df_powerbi` e `export/riconciliazione_powerbi.xlsx` (foglio `df_merge`, 26 colonne) |
 
 ### Dettagli sulle sorgenti XML
 
@@ -426,8 +425,8 @@ Il file contiene valori, non formule: nessun ricalcolo lato Excel.
 ## 9. Requisiti ed esecuzione
 
 - Runtime **Fabric / Synapse** con `notebookutils` (accesso a OneLake) e `openpyxl`.
-- Le celle vanno eseguite **in ordine**: `[15]` presuppone tutte le precedenti, il blocco finale
-  presuppone `df_merge`.
+- Le celle vanno eseguite **in ordine**: `[15]` presuppone tutte le precedenti (tranne `[6-bis]`,
+  opzionale), `[16]` e `[17]` presuppongono `df_merge`.
 - Il notebook è pensato per essere eseguito dall'alto verso il basso senza modifiche; i parametri
   da toccare stanno tutti nella sezione `[1]`.
 - Il codice è difensivo per scelta: quasi tutti i merge usano `validate=`, i join sulle anagrafiche
