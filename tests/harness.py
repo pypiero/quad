@@ -55,11 +55,19 @@ class _NotebookutilsFinto:
 
 
 def _leggi_celle(percorso_notebook):
-    """Restituisce il codice delle celle, come stringhe."""
+    """Restituisce il codice delle celle di codice non vuote, in ordine."""
     with open(percorso_notebook, encoding="utf-8") as file:
         notebook = json.load(file)
 
-    return ["".join(cella["source"]) for cella in notebook["cells"]]
+    celle_codice = []
+    for cella in notebook["cells"]:
+        if cella.get("cell_type") != "code":
+            continue
+        codice = "".join(cella.get("source", []))
+        if codice.strip():
+            celle_codice.append(codice)
+
+    return celle_codice
 
 
 def _percorso_zip(codice):
@@ -129,10 +137,8 @@ def esegui_notebook(percorso_notebook=NOTEBOOK, cartella_output=None):
     """
 
     celle = _leggi_celle(percorso_notebook)
-    codice_processo = celle[0]
-    codice_export = celle[1] if len(celle) > 1 else ""
 
-    _scrivi_zip(_percorso_zip(codice_processo))
+    _scrivi_zip(_percorso_zip("\n".join(celle)))
 
     if cartella_output is None:
         cartella_output = tempfile.mkdtemp(prefix="quad_test_")
@@ -159,8 +165,8 @@ def esegui_notebook(percorso_notebook=NOTEBOOK, cartella_output=None):
     }
 
     try:
-        exec(compile(codice_processo, "cella_processo", "exec"), namespace)
-        exec(compile(codice_export, "cella_export", "exec"), namespace)
+        for indice, codice_cella in enumerate(celle, start=1):
+            exec(compile(codice_cella, f"cella_{indice}", "exec"), namespace)
     finally:
         pd.read_excel = lettura_originale
         pd.ExcelWriter = scrittore_originale

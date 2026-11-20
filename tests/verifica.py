@@ -887,7 +887,7 @@ def verifica_descrizione_codice(df_xml_fatture, df_xml_codici_articolo,
 
 
 def verifica_export(cartella_output, df_powerbi, namespace):
-    titolo(14, "EXPORT E TIPI DELLE CELLE (celle [16])")
+    titolo(14, "EXPORT E TIPI DELLE CELLE (celle [16]-[17])")
 
     for nome in ("riconciliazione.xlsx", "riconciliazione_powerbi.xlsx"):
         controlla(

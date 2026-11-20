@@ -151,7 +151,7 @@ partenza, perché è da lì che il report prende i codici da mostrare.
                             df_merge ──► [16] export diagnostico
                                 │
                                 ▼
-                    blocco finale: df_powerbi ──► export report
+                    [17] report: df_powerbi ──► export report
 ```
 
 ### Granularità delle tabelle
@@ -165,7 +165,7 @@ partenza, perché è da lì che il report prende i codici da mostrare.
 | `df_fatture` | riga di carico | [7]-[10] |
 | `map_ddt` | coppia DDT XML ↔ DDT carico | [14] |
 | `df_merge` | riga riconciliata (XML, carico o entrambe) | [15] |
-| `df_powerbi` | come `df_merge`, 26 colonne | blocco finale |
+| `df_powerbi` | come `df_merge`, 26 colonne | [17] |
 
 **Questo è il punto più importante da capire**: i due lati arrivano al merge con granularità
 diverse. L'XML parte da *linee* e arriva ad *articoli*; i carichi partono già da *articoli*. Se le
@@ -206,7 +206,8 @@ Colonne tecniche create dal notebook:
 
 ## 5. Le 16 sezioni, una per una
 
-Ogni sezione nel codice è marcata da `# %% [n]`.
+Ogni sezione è una cella di codice separata del notebook, preceduta dalla relativa cella Markdown
+con il titolo `## [n] ...`.
 
 ### [1] Configurazione
 
@@ -722,7 +723,7 @@ Il motivo è il costo della scrittura: `df_merge` ha 82 colonne e Excel costa ci
 
 ## 6. Il blocco finale: il report
 
-La seconda cella del notebook costruisce `df_powerbi` e lo salva in
+La cella `[17]` del notebook costruisce `df_powerbi` e lo salva in
 `export/riconciliazione_powerbi.xlsx` (un foglio, 26 colonne).
 
 ### 6.1 `coalesce_colonne`
@@ -999,7 +1000,7 @@ Stato abbinamento
 | [13] | `campo_pivot`, `chiave_articolo_xml`, `somma_o_nulla`, `numeri_linea_xml` |
 | [14] | `valore_valido`, `maschera_valida`, `primo_valido`, `abbina_gruppo` |
 | [15] | `crea_lookup_codice`, `tipo_match`, `stato_documento`, `stato_abbinamento`, `numero_ddt_comune`, `stato_ddt_riga` |
-| report | `pulisci_testo`, `coalesce_colonne`, `crea_etichetta_fornitore` |
+| [17] (report) | `pulisci_testo`, `coalesce_colonne`, `crea_etichetta_fornitore` |
 
 ---
 
