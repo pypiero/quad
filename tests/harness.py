@@ -1,13 +1,13 @@
 """
 Esegue il notebook di riconciliazione senza Fabric.
 
-Il notebook dipende da tre cose che in locale non esistono:
-notebookutils (accesso a OneLake), i file Excel di origine e la
-scrittura dell'export su OneLake. Qui vengono sostituite:
+Il notebook dipende da servizi e file non disponibili in locale.
+Qui vengono sostituiti:
 
     notebookutils.fs.*   -> filesystem finto
     pd.read_excel        -> dati sintetici in memoria
     pd.ExcelWriter       -> cartella temporanea locale
+    spark                -> simulazione di scrittura Delta
     display()            -> funzione che non stampa nulla
 
 Il codice del notebook NON viene modificato: viene letto
@@ -52,6 +52,60 @@ class _FilesystemFinto:
 
 class _NotebookutilsFinto:
     fs = _FilesystemFinto()
+
+
+class _ScrittoreDeltaFinto:
+    """Registra la configurazione e la destinazione della scrittura Spark."""
+
+    def __init__(self, spark, dataframe):
+        self.spark = spark
+        self.dataframe = dataframe
+        self.formato = None
+        self.modalita = None
+        self.opzioni = {}
+
+    def format(self, formato):
+        self.formato = formato
+        return self
+
+    def mode(self, modalita):
+        self.modalita = modalita
+        return self
+
+    def option(self, nome, valore):
+        self.opzioni[nome] = valore
+        return self
+
+    def saveAsTable(self, nome):
+        self.spark.tabelle_scritte.append(nome)
+        self.spark.scritture.append({
+            "nome": nome,
+            "formato": self.formato,
+            "modalita": self.modalita,
+            "opzioni": self.opzioni.copy(),
+            "dataframe": self.dataframe,
+        })
+
+
+class _DataFrameSparkFinto:
+    def __init__(self, spark, dataframe):
+        self.write = _ScrittoreDeltaFinto(spark, dataframe)
+
+
+class _SparkFinto:
+    """Registra le conversioni e scritture senza richiedere Fabric."""
+
+    def __init__(self):
+        self.tabelle_scritte = []
+        self.scritture = []
+        self.dataframe_creati = []
+
+    def createDataFrame(self, dataframe):
+        self.dataframe_creati.append(dataframe.copy())
+        return _DataFrameSparkFinto(self, dataframe.copy())
+
+    def table(self, nome):
+        raise AssertionError(f"Accesso a tabella Spark non previsto dal test: {nome}")
 
 
 def _leggi_celle(percorso_notebook):
@@ -159,6 +213,7 @@ def esegui_notebook(percorso_notebook=NOTEBOOK, cartella_output=None):
     namespace = {
         "pd": pd,
         "notebookutils": _NotebookutilsFinto(),
+        "spark": _SparkFinto(),
         # nel notebook display() mostra i DataFrame: qui non serve
         "display": lambda *argomenti, **kwargs: None,
         "__name__": "__main__",

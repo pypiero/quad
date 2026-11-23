@@ -8,7 +8,7 @@ valori lato carico, con la differenza e lo stato dell'abbinamento.
 Il repository contiene:
 
 ```
-Notebook_2 (1).ipynb    tutto il processo (celle [1]–[17], ciascuna preceduta da Markdown)
+Notebook_2 (1).ipynb    tutto il processo (celle [1]–[18], ciascuna preceduta da Markdown)
 README.md               questo file
 docs/LOGICA.md          guida completa alla logica, cella per cella
 tests/                  test eseguibile su dati sintetici
@@ -71,7 +71,7 @@ Le righe che non superano il perimetro non compaiono nel risultato.
 
 ## 3. Struttura del notebook
 
-Il notebook è suddiviso in 18 celle di codice separate (`[1]`–`[17]`, inclusa `[6-bis]`), ciascuna
+Il notebook è suddiviso in 19 celle di codice separate (`[1]`–`[18]`, inclusa `[6-bis]`), ciascuna
 preceduta da una breve cella Markdown che ne descrive il ruolo, oltre a un'introduzione iniziale.
 
 | # | Cella | Cosa produce |
@@ -94,6 +94,7 @@ preceduta da una breve cella Markdown che ne descrive il ruolo, oltre a un'intro
 | 15 | Merge finale | `df_merge` (full outer), chiave DDT derivata se l'XML non ha bolla |
 | 16 | Esportazione completa | `export/riconciliazione.xlsx`, un foglio (`df_merge`, 82 colonne) |
 | 17 | Esportazione report Power BI | `df_powerbi` e `export/riconciliazione_powerbi.xlsx` (foglio `df_merge`, 26 colonne) |
+| 18 | Scrittura tabella Delta | tabella `quadratura_powerbi`, sovrascritta solo se `df_powerbi` non è vuoto; i nomi delle colonne di `df_powerbi` vengono modificati sostituendo gli spazi con `_` |
 
 ### Dettagli sulle sorgenti XML
 
@@ -425,8 +426,10 @@ Il file contiene valori, non formule: nessun ricalcolo lato Excel.
 ## 9. Requisiti ed esecuzione
 
 - Runtime **Fabric / Synapse** con `notebookutils` (accesso a OneLake) e `openpyxl`.
+- Per `[18]` occorrono una sessione Spark e un Lakehouse predefinito accessibile in scrittura:
+  la tabella `quadratura_powerbi`, se già presente, viene sovrascritta insieme al suo schema.
 - Le celle vanno eseguite **in ordine**: `[15]` presuppone tutte le precedenti (tranne `[6-bis]`,
-  opzionale), `[16]` e `[17]` presuppongono `df_merge`.
+  opzionale), `[16]` e `[17]` presuppongono `df_merge`, `[18]` presuppone `df_powerbi`.
 - Il notebook è pensato per essere eseguito dall'alto verso il basso senza modifiche; i parametri
   da toccare stanno tutti nella sezione `[1]`.
 - Il codice è difensivo per scelta: quasi tutti i merge usano `validate=`, i join sulle anagrafiche

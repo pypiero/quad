@@ -978,7 +978,7 @@ def verifica_export(cartella_output, df_powerbi, namespace):
             str(valori_cfor),
         )
 
-    dataset = namespace["df_powerbi"]
+    dataset = df_powerbi
 
     controlla(
         "etichetta fornitore nella forma '(CFOR) Nome'",
@@ -1058,6 +1058,35 @@ def verifica_export(cartella_output, df_powerbi, namespace):
         str(dataset[["Stato abbinamento", "CPCO"]].to_dict("records")),
     )
 
+    # cella [18]: scrittura della tabella Delta quadratura_powerbi
+    spark_finto = namespace["spark"]
+    controlla(
+        "tabella Delta quadratura_powerbi scritta",
+        spark_finto.tabelle_scritte == ["quadratura_powerbi"],
+        str(spark_finto.tabelle_scritte),
+    )
+    controlla(
+        "colonne Delta normalizzate rispetto al report",
+        len(spark_finto.dataframe_creati) == 1
+        and list(spark_finto.dataframe_creati[0].columns) == [
+            str(c).strip().replace(" ", "_") for c in dataset.columns
+        ],
+        str(list(spark_finto.dataframe_creati[0].columns)) if spark_finto.dataframe_creati else "nessun DataFrame",
+    )
+    controlla(
+        "scrittura Delta in overwrite con aggiornamento schema",
+        len(spark_finto.scritture) == 1
+        and spark_finto.scritture[0]["formato"] == "delta"
+        and spark_finto.scritture[0]["modalita"] == "overwrite"
+        and spark_finto.scritture[0]["opzioni"].get("overwriteSchema") == "true",
+        str(spark_finto.scritture),
+    )
+    controlla(
+        "scrittura Delta conserva righe e valori del report",
+        len(spark_finto.dataframe_creati) == 1
+        and spark_finto.dataframe_creati[0].set_axis(dataset.columns, axis=1).equals(dataset),
+    )
+
     print()
     print("Dataset del report:")
     print(mostra(df_powerbi[[
@@ -1087,6 +1116,11 @@ def stampa_riepilogo():
 
 def main():
     namespace = harness.esegui_notebook()
+    # La cella [18] normalizza i nomi in df_powerbi dopo l'export Excel.
+    # Ripristiniamo le intestazioni del report solo per i controlli esistenti.
+    df_report = namespace["df_powerbi"].rename(
+        columns=lambda colonna: colonna.replace("_", " ")
+    )
 
     verifica_data_ddt(namespace["df_xml_fatture"])
     verifica_denominazione(
@@ -1097,7 +1131,7 @@ def main():
     verifica_map_ddt(namespace["map_ddt"])
     verifica_merge(namespace["df_merge"])
     verifica_ddt_derivato(namespace["df_merge"])
-    verifica_tipologia(namespace["df_merge"], namespace["df_powerbi"])
+    verifica_tipologia(namespace["df_merge"], df_report)
     verifica_stato_ddt(namespace["df_merge"])
     verifica_codici(namespace["df_xml_righe"])
     verifica_normalizzazione_carichi(
@@ -1115,7 +1149,7 @@ def main():
     )
     verifica_export(
         namespace["_cartella_output"],
-        namespace["df_powerbi"],
+        df_report,
         namespace,
     )
 

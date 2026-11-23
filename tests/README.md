@@ -20,7 +20,13 @@ Dalla radice del repository:
 
 ```bash
 python tests/verifica.py
+python tests/test_delta.py
+python tests/test_ottimizzazioni.py
 ```
+
+Il secondo comando verifica anche il caso di DataFrame vuoto e gli errori Spark; il terzo
+controlla l'ordine dei codici XML e la riesecuzione del report senza modificare `df_merge`.
+Le scritture Delta sono simulate: la compatibilità effettiva con Spark e il Lakehouse va verificata in Fabric.
 
 Esce con:
 
@@ -36,7 +42,7 @@ L'output è diviso in sezioni numerate, una per area funzionale, e termina con i
 ## Cosa viene sostituito
 
 Il codice del notebook **non viene modificato**: viene letto dall'`.ipynb` ed eseguito così com'è.
-Vengono sostituite solo le tre cose che in locale non esistono:
+Vengono sostituite le dipendenze che in locale non esistono:
 
 | Nel notebook | Nel test |
 |---|---|
@@ -44,6 +50,7 @@ Vengono sostituite solo le tre cose che in locale non esistono:
 | `pd.read_excel` | tabelle sintetiche, smistate per nome file |
 | `pd.ExcelWriter` | cartella temporanea (`tempfile`), non OneLake |
 | `display()` | funzione che non stampa |
+| `spark` | oggetto finto che registra conversioni e scritture Delta, senza scrivere tabelle |
 
 Lo ZIP degli XML non viene copiato: viene scritto direttamente nel percorso locale che il notebook
 si aspetta (`zip_locale_python`), letto dal sorgente del notebook stesso. Se quel percorso cambia,
