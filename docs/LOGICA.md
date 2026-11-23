@@ -152,6 +152,7 @@ partenza, perché è da lì che il report prende i codici da mostrare.
                                 │
                                 ▼
                     [17] report: df_powerbi ──► export report
+                    [18] Delta: df_powerbi ──► quadratura_powerbi
 ```
 
 ### Granularità delle tabelle
@@ -724,7 +725,12 @@ Il motivo è il costo della scrittura: `df_merge` ha 82 colonne e Excel costa ci
 ## 6. Il blocco finale: il report
 
 La cella `[17]` del notebook costruisce `df_powerbi` e lo salva in
-`export/riconciliazione_powerbi.xlsx` (un foglio, 26 colonne).
+`export/riconciliazione_powerbi.xlsx` (un foglio, 26 colonne). La cella `[18]` scrive lo stesso
+dataset come tabella Delta `quadratura_powerbi` nel Lakehouse predefinito di Fabric, sostituendo
+gli spazi nei nomi delle colonne con `_` direttamente in `df_powerbi`. L'Excel scritto dalla
+cella `[17]` mantiene i nomi originali con gli spazi.
+Se il DataFrame non è vuoto, la tabella esistente e il suo schema vengono sovrascritti; altrimenti
+non viene effettuata alcuna scrittura. Servono una sessione Spark e permessi di scrittura sul Lakehouse.
 
 ### 6.1 `coalesce_colonne`
 
