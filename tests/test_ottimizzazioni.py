@@ -32,6 +32,9 @@ class TestOttimizzazioni(unittest.TestCase):
                 namespace = harness.esegui_notebook(percorso, cartella)
         codici = namespace["df_xml_codici_articolo"]
         self.assertGreater(len(codici), 0)
+        # Prima del filtro dizionario non devono esistere codici virtuali
+        # derivati dal tag Descrizione della linea.
+        self.assertNotIn("Descrizione", set(codici["CodiceTipoXML"].dropna()))
         ordinati = codici.sort_values(
             ["ChiaveRigaXML", "ProgressivoCodiceXML"], na_position="last"
         ).reset_index(drop=True)

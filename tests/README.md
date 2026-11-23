@@ -22,10 +22,16 @@ Dalla radice del repository:
 python tests/verifica.py
 python tests/test_delta.py
 python tests/test_ottimizzazioni.py
+python tests/test_export_diagnostico.py
+python tests/test_report_match.py
+python tests/test_priorita_report.py
 ```
 
 Il secondo comando verifica anche il caso di DataFrame vuoto e gli errori Spark; il terzo
 controlla l'ordine dei codici XML e la riesecuzione del report senza modificare `df_merge`.
+Il quarto verifica l'export diagnostico attivato e disattivato; il quinto verifica i campi match,
+l'export Excel Power BI opzionale e la diagnostica delle regole. Il sesto verifica la scelta del
+primo valore disponibile, compresi valori mancanti, numeri e date.
 Le scritture Delta sono simulate: la compatibilità effettiva con Spark e il Lakehouse va verificata in Fabric.
 
 Esce con:
@@ -42,6 +48,8 @@ L'output è diviso in sezioni numerate, una per area funzionale, e termina con i
 ## Cosa viene sostituito
 
 Il codice del notebook **non viene modificato**: viene letto dall'`.ipynb` ed eseguito così com'è.
+La suite `verifica.py` abilita il flag dell'Excel Power BI dopo la cella di configurazione per
+testare anche il file opzionale; gli altri test verificano l'impostazione predefinita.
 Vengono sostituite le dipendenze che in locale non esistono:
 
 | Nel notebook | Nel test |
@@ -80,11 +88,9 @@ il test si adegua da solo.
    `CampoCanonico` segnalato senza bloccare, regole disallineate fra i due fogli segnalate;
 10. **Dizionario** — regola non riconosciuta e chiave duplicata segnalate senza bloccare;
 11. **Perimetro e anagrafiche** — filtro `CDOCIAA`, precedenza `TDEC` su `CARF`, punti di consegna;
-12. **Descrizione come codice e tipi codificati** — un fornitore che scrive il codice in coda alla
-    descrizione viene abbinato lo stesso; un altro che lo scrive in testa (`ESTRAI_PRIMA_STRINGA`)
-    si abbina anche quando la linea porta un `MINSAN` non codificato; la descrizione viene aggiunta
-    a ogni linea e un codice vero prevale su di essa nello stesso campo; un `CodiceTipoXML` assente
-    dal dizionario non entra nella tabella dei codici;
+12. **Descrizione e tipi codificati** — la descrizione non genera più un codice virtuale anche se
+    il dizionario la codifica; i codici reali e la descrizione nel report restano disponibili e le
+    righe che si abbinavano solo tramite descrizione restano non abbinate;
 13. **Export** — file creati e tipo delle celle nell'xlsx (date, numeri, testo).
 
 ## Provare il test contro un'altra versione del notebook

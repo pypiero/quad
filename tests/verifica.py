@@ -226,7 +226,7 @@ def verifica_merge(df_merge):
 
     controlla(
         "righe carico senza riscontro XML -> Solo carico",
-        len(solo_carico) == 4
+        len(solo_carico) == 6
         and "ARTICOLO EXTRA"
         in set(solo_carico["mersy_descrizione_articolo(XART)"]),
         str(solo_carico[["mersy_descrizione_articolo(XART)"]].to_dict("records")),
@@ -241,8 +241,8 @@ def verifica_merge(df_merge):
         "Senza DDT" in set(df_merge["NumeroDDT_Comune"]),
     )
     controlla(
-        "merge senza duplicati (19 righe)",
-        len(df_merge) == 19,
+        "merge senza duplicati (21 righe)",
+        len(df_merge) == 21,
         str(len(df_merge)),
     )
     controlla(
@@ -756,140 +756,79 @@ def verifica_perimetro(df_fatture):
 
 
 def verifica_descrizione_codice(df_xml_fatture, df_xml_codici_articolo,
-                                df_xml_righe):
-    titolo(13, "DESCRIZIONE COME CODICE E TIPI CODIFICATI (celle [3] e [12])")
-
-    print(mostra(df_xml_codici_articolo[
-        ["CFOR_XML", "CodiceTipoXML", "CodiceValoreXML",
-         "CampoCanonico", "CodiceValoreNormalizzato"]
-    ]))
-
-    descrizioni = df_xml_codici_articolo.loc[
-        df_xml_codici_articolo["CodiceTipoXML"] == "Descrizione"
-    ]
-
-    # dropna: sui dati rotti il CFOR può mancare e sorted() non
-    # accetta i valori NA
-    fornitori_descrizione = sorted(set(descrizioni["CFOR_XML"].dropna()))
+                                df_xml_righe, df_merge, namespace):
+    titolo(13, "CODICI ARTICOLO SENZA USO DELLA DESCRIZIONE (celle [3] e [12])")
 
     tipi_presenti = set(df_xml_codici_articolo["CodiceTipoXML"].dropna())
-
-    valori_presenti = set(
-        df_xml_codici_articolo["CodiceValoreNormalizzato"].dropna()
-    )
-
-    def tipi_della_linea(file_xml, numero_linea):
-        """Tipi di codice rimasti sulle linee di quell'XML."""
-
-        chiavi = set(
-            df_xml_fatture.loc[
-                (df_xml_fatture["FileXML"] == file_xml)
-                & (df_xml_fatture["NumeroLinea"] == numero_linea),
-                "ChiaveRigaXML",
-            ]
-        )
-
-        return df_xml_codici_articolo.loc[
-            df_xml_codici_articolo["ChiaveRigaXML"].isin(chiavi),
-            "CodiceTipoXML",
-        ].tolist()
-
+    valori_presenti = set(df_xml_codici_articolo["CodiceValoreNormalizzato"].dropna())
     controlla(
-        "la descrizione di F005 diventa un codice articolo",
-        "ART222" in descrizioni.loc[
-            descrizioni["CFOR_XML"] == "F005",
-            "CodiceValoreNormalizzato",
-        ].tolist(),
-        mostra(descrizioni),
+        "la descrizione non genera codici virtuali, anche se presente nel dizionario",
+        "Descrizione" not in tipi_presenti,
+        str(sorted(tipi_presenti)),
     )
-
     controlla(
-        "la descrizione viene aggiunta a ogni linea, anche quando "
-        "c'e' gia' un codice",
-        tipi_della_linea("IT06666666666_00030.xml", 2)
-        == ["FORN", "Descrizione"],
-        str(tipi_della_linea("IT06666666666_00030.xml", 2)),
-    )
-
-    controlla(
-        "la descrizione di F006 usa ESTRAI_PRIMA_STRINGA",
-        descrizioni.loc[
-            descrizioni["CFOR_XML"] == "F006",
-            "CodiceValoreNormalizzato",
-        ].tolist() == ["1234"],
-        mostra(descrizioni),
-    )
-
-    controlla(
-        "la descrizione vale solo per i fornitori che la codificano",
-        fornitori_descrizione == ["F005", "F006"],
-        str(fornitori_descrizione),
-    )
-
-    controlla(
-        "la descrizione si usa anche con un codice non codificato "
-        "sulla linea (MINSAN)",
-        tipi_della_linea("IT07777777777_00040.xml", 1) == ["Descrizione"],
-        str(tipi_della_linea("IT07777777777_00040.xml", 1)),
-    )
-
-    controllo_linea_con_codice = df_xml_righe.loc[
-        df_xml_righe["NumeroFattura"] == "00030",
-        "Codice Art. Fornitore",
-    ].dropna().tolist()
-
-    controlla(
-        "un codice vero prevale sulla descrizione nello stesso campo",
-        controllo_linea_con_codice[0] == "ART001",
-        str(controllo_linea_con_codice),
-    )
-
-    controlla(
-        "il progressivo della descrizione e' sempre l'ultimo",
-        int(
-            descrizioni["ProgressivoCodiceXML"].max()
-        ) > int(
-            df_xml_codici_articolo.loc[
-                df_xml_codici_articolo["CodiceTipoXML"] != "Descrizione",
-                "ProgressivoCodiceXML",
-            ].max()
-        ),
-        str(sorted(descrizioni["ProgressivoCodiceXML"].tolist())),
-    )
-
-    chiave_f006 = df_xml_righe.loc[
-        df_xml_righe["NumeroFattura"] == "00040", "ChiaveArticoloXML"
-    ].tolist()
-
-    controlla(
-        "F006 si abbina al carico tramite il codice preso dalla "
-        "descrizione",
-        chiave_f006 == ["CART|1234"],
-        str(chiave_f006),
-    )
-
-    controlla(
-        "tipo non codificato escluso dalla tabella dei codici",
+        "tipi non codificati esclusi dalla tabella dei codici",
         "XYZ" not in tipi_presenti and "MINSAN" not in tipi_presenti,
         str(sorted(tipi_presenti)),
     )
-
     controlla(
         "ogni codice rimasto ha un campo canonico",
         df_xml_codici_articolo["CampoCanonico"].notna().all(),
-        str(int(df_xml_codici_articolo["CampoCanonico"].isna().sum())),
     )
+    controlla("il valore del tipo escluso non compare nei codici", "SCONTO-9" not in valori_presenti)
 
+    for fattura, descrizione in (
+        ("00030", "RICOTTA GR 500 ART222"),
+        ("00040", "1234 magnesio 500mg"),
+    ):
+        righe = df_xml_righe.loc[
+            (df_xml_righe["NumeroFattura"] == fattura)
+            & (df_xml_righe["Descrizione"] == descrizione)
+        ]
+        controlla(
+            f"descrizione della fattura {fattura} conservata senza codice estratto",
+            len(righe) == 1
+            and righe["ChiaveArticoloXML"].iloc[0] == "RIGA DESCRITTIVA|1"
+            and pd.isna(righe["Codice Art. Fornitore"].iloc[0]),
+            mostra(righe),
+        )
+        righe_merge = df_merge.loc[
+            (df_merge["NumeroFattura"] == fattura)
+            & (df_merge["Descrizione"] == descrizione)
+        ]
+        controlla(
+            f"fattura {fattura}: la riga senza codice resta Solo XML",
+            len(righe_merge) == 1 and righe_merge["StatoAbbinamento"].iloc[0] == "Solo XML",
+            mostra(righe_merge),
+        )
+        carico = df_merge.loc[df_merge[namespace["COL_NDOGIAA"]] == fattura]
+        controlla(
+            f"fattura {fattura}: il carico non si abbina tramite descrizione",
+            len(carico) == 1 and carico["StatoAbbinamento"].iloc[0] == "Solo carico",
+            mostra(carico),
+        )
+
+    fornitore_vero = df_xml_righe.loc[
+        (df_xml_righe["NumeroFattura"] == "00030")
+        & (df_xml_righe["Descrizione"] == "PANE INTEGRALE"),
+        "Codice Art. Fornitore",
+    ]
+    controlla("i codici articolo reali continuano a essere letti", fornitore_vero.tolist() == ["ART001"])
     controlla(
-        "il valore del tipo escluso non compare nei codici",
-        "SCONTO-9" not in valori_presenti,
+        "la descrizione rimane nelle righe fattura XML",
+        df_xml_fatture["Descrizione"].notna().any(),
     )
 
 
 def verifica_export(cartella_output, df_powerbi, namespace):
     titolo(14, "EXPORT E TIPI DELLE CELLE (celle [16]-[17])")
 
-    for nome in ("riconciliazione.xlsx", "riconciliazione_powerbi.xlsx"):
+    controlla(
+        "export diagnostico disattivato per default",
+        not (Path(cartella_output) / "riconciliazione.xlsx").exists(),
+    )
+
+    for nome in ("riconciliazione_powerbi.xlsx",):
         controlla(
             f"{nome} creato",
             (Path(cartella_output) / nome).exists(),
@@ -938,8 +877,8 @@ def verifica_export(cartella_output, df_powerbi, namespace):
         )
 
     controlla(
-        "il report ha 26 colonne",
-        len(intestazioni) == 26,
+        "il report ha 28 colonne",
+        len(intestazioni) == 28,
         f"trovate {len(intestazioni)}",
     )
 
@@ -980,6 +919,27 @@ def verifica_export(cartella_output, df_powerbi, namespace):
 
     dataset = df_powerbi
 
+    for colonna_report, colonna_merge in (
+        ("Tipo match articolo", "TipoMatch"),
+        ("Metodo match DDT", "MetodoMatchDDT"),
+    ):
+        atteso = namespace["df_merge"][colonna_merge].astype("string").fillna("").reset_index(drop=True)
+        controlla(
+            f"tracciamento {colonna_report} coerente con il merge",
+            dataset[colonna_report].equals(atteso),
+        )
+    controlla(
+        "i due campi di match sono in coda al report",
+        intestazioni[-2:] == ["Tipo match articolo", "Metodo match DDT"],
+        str(intestazioni[-2:]),
+    )
+
+    controlla(
+        "la descrizione resta visibile nel report Power BI",
+        {"RICOTTA GR 500 ART222", "1234 magnesio 500mg"}.issubset(
+            set(dataset["Descrizione"].dropna())
+        ),
+    )
     controlla(
         "etichetta fornitore nella forma '(CFOR) Nome'",
         dataset.loc[dataset["CFOR"].eq("F001"), "Denominazione"]
@@ -1115,7 +1075,7 @@ def stampa_riepilogo():
 
 
 def main():
-    namespace = harness.esegui_notebook()
+    namespace = harness.esegui_notebook(esporta_excel_powerbi=True)
     # La cella [18] normalizza i nomi in df_powerbi dopo l'export Excel.
     # Ripristiniamo le intestazioni del report solo per i controlli esistenti.
     df_report = namespace["df_powerbi"].rename(
@@ -1146,6 +1106,8 @@ def main():
         namespace["df_xml_fatture"],
         namespace["df_xml_codici_articolo"],
         namespace["df_xml_righe"],
+        namespace["df_merge"],
+        namespace,
     )
     verifica_export(
         namespace["_cartella_output"],
