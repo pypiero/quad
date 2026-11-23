@@ -35,7 +35,18 @@ NOTEBOOK = Path(
 
 
 class _FilesystemFinto:
-    """Sostituisce notebookutils.fs: il notebook crede di lavorare."""
+    """Sostituisce notebookutils.fs e registra i log in memoria."""
+
+    def __init__(self):
+        self.file_scritti = {}
+        self.scritture = []
+
+    def put(self, percorso, contenuto, overwrite=False):
+        if not overwrite and percorso in self.file_scritti:
+            return False
+        self.file_scritti[percorso] = contenuto
+        self.scritture.append((percorso, contenuto))
+        return True
 
     def exists(self, percorso):
         return True
@@ -51,7 +62,8 @@ class _FilesystemFinto:
 
 
 class _NotebookutilsFinto:
-    fs = _FilesystemFinto()
+    def __init__(self):
+        self.fs = _FilesystemFinto()
 
 
 class _ScrittoreDeltaFinto:

@@ -212,7 +212,8 @@ con il titolo `## [n] ...`.
 
 ### [1] Configurazione
 
-Un unico punto in cui si dichiara dove stanno le cose. Nessuna logica.
+Un unico punto in cui si dichiarano le sorgenti e i flag; viene anche avviato il log testuale.
+Il riepilogo finale è scritto dalla cella `[18]`; le modalità e i limiti sono descritti nel README.
 
 | Variabile | Uso |
 |---|---|
@@ -459,8 +460,8 @@ si riportano nel DataFrame. I valori originali restano.
 | `CART` | `CART_Chiave` | `RegoleCodiciCarico` (`CODICE_CLIENTE`) |
 | `CALA` (da `CARF`) | `CALA_Chiave` | `RegoleCodiciCarico` (`CODICE_FORNITORE`) |
 
-La sezione stampa un riepilogo per campo (valori distinti, chiavi distinte, valori modificati dalla
-normalizzazione) e **segnala i `CampoCanonico` non riconosciuti**: un refuso come `CODICE_FORNTORE`
+Con `DEBUG = True` la sezione stampa un riepilogo per campo (valori distinti, chiavi distinte,
+valori modificati dalla normalizzazione). In ogni caso **segnala i `CampoCanonico` non riconosciuti**: un refuso come `CODICE_FORNTORE`
 invece di `CODICE_FORNITORE` renderebbe la regola invisibile, e senza questo controllo passerebbe
 inosservato.
 

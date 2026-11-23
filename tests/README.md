@@ -25,13 +25,15 @@ python tests/test_ottimizzazioni.py
 python tests/test_export_diagnostico.py
 python tests/test_report_match.py
 python tests/test_priorita_report.py
+python tests/test_log.py
 ```
 
 Il secondo comando verifica anche il caso di DataFrame vuoto e gli errori Spark; il terzo
 controlla l'ordine dei codici XML e la riesecuzione del report senza modificare `df_merge`.
 Il quarto verifica l'export diagnostico attivato e disattivato; il quinto verifica i campi match,
 l'export Excel Power BI opzionale e la diagnostica delle regole. Il sesto verifica la scelta del
-primo valore disponibile, compresi valori mancanti, numeri e date.
+primo valore disponibile, compresi valori mancanti, numeri e date. Il settimo verifica il log
+testuale, gli errori e il flag debug usando un filesystem finto.
 Le scritture Delta sono simulate: la compatibilità effettiva con Spark e il Lakehouse va verificata in Fabric.
 
 Esce con:
@@ -54,7 +56,7 @@ Vengono sostituite le dipendenze che in locale non esistono:
 
 | Nel notebook | Nel test |
 |---|---|
-| `notebookutils.fs.*` | filesystem finto: le copie sono no-op |
+| `notebookutils.fs.*` | filesystem finto: copie no-op e log registrati in memoria |
 | `pd.read_excel` | tabelle sintetiche, smistate per nome file |
 | `pd.ExcelWriter` | cartella temporanea (`tempfile`), non OneLake |
 | `display()` | funzione che non stampa |

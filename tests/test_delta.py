@@ -6,6 +6,8 @@ import json
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
+from datetime import datetime, timezone
+from time import perf_counter
 
 import pandas as pd
 
@@ -26,11 +28,30 @@ class TestScritturaDelta(unittest.TestCase):
             raise AssertionError("Cella di scrittura Delta [18] non trovata")
         cls.codice = compile("".join(celle[indici[0] + 1]["source"]), "cella_18", "exec")
 
+    def namespace(self, dataframe, spark):
+        foglio = pd.DataFrame(columns=["CFOR"])
+        return {
+            "df_powerbi": dataframe, "spark": spark,
+            "datetime": datetime, "timezone": timezone, "perf_counter": perf_counter,
+            "inizio_log": datetime.now(timezone.utc), "tempo_inizio": perf_counter(),
+            "file_log": "log_test.txt", "scrivi_log": lambda testo: None,
+            "NOME_FOGLIO_CODICI_XML": "xml", "NOME_FOGLIO_CODICI_CARICO": "carico",
+            "NOME_FOGLIO_DDT": "ddt", "df_diz_codici_xml": foglio,
+            "COLONNE_CODICI_XML": {"cfor": "CFOR"},
+            "COLONNE_CODICI_CARICO": {"cfor": "CFOR"}, "COLONNE_DDT": {"cfor": "CFOR"},
+            "df_diz_codici_carico": foglio, "df_diz_regole_ddt": foglio,
+            "df_errori": pd.DataFrame(columns=["File", "Errore"]),
+            "dizionari": {"Anomalie": pd.DataFrame(), "ChiaviDuplicate": pd.DataFrame()},
+            "regole_non_allineate": pd.DataFrame(), "campi_non_riconosciuti": [],
+            "fatture_ambiguity": pd.Series(dtype="object"), "file_xml": [],
+            "xml_in_memoria": [], "df_merge": pd.DataFrame(columns=["StatoAbbinamento"]),
+        }
+
     def test_scrive_dataframe_con_nomi_normalizzati_e_opzioni_previste(self):
         dataframe = pd.DataFrame({" Data fattura ": ["2026-01-01"], "CFOR": ["001"]})
         originale = dataframe.copy(deep=True)
         spark = harness._SparkFinto()
-        namespace = {"df_powerbi": dataframe, "spark": spark}
+        namespace = self.namespace(dataframe, spark)
         with contextlib.redirect_stdout(io.StringIO()) as output:
             exec(self.codice, namespace)
 
@@ -51,7 +72,7 @@ class TestScritturaDelta(unittest.TestCase):
         originale = dataframe.copy(deep=True)
         spark = harness._SparkFinto()
         with contextlib.redirect_stdout(io.StringIO()) as output:
-            exec(self.codice, {"df_powerbi": dataframe, "spark": spark})
+            exec(self.codice, self.namespace(dataframe, spark))
 
         pd.testing.assert_frame_equal(dataframe, originale.set_axis(["Data_fattura"], axis=1))
         self.assertEqual(spark.dataframe_creati, [])
@@ -62,7 +83,7 @@ class TestScritturaDelta(unittest.TestCase):
         spark = Mock()
         spark.createDataFrame.side_effect = RuntimeError("errore Spark")
         with self.assertRaisesRegex(RuntimeError, "errore Spark"):
-            exec(self.codice, {"df_powerbi": pd.DataFrame({"colonna": [1]}), "spark": spark})
+            exec(self.codice, self.namespace(pd.DataFrame({"colonna": [1]}), spark))
 
 
 if __name__ == "__main__":

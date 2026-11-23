@@ -400,6 +400,30 @@ Il file contiene valori, non formule: nessun ricalcolo lato Excel.
 
 ## 9. Requisiti ed esecuzione
 
+### Log e debug
+
+Ogni esecuzione avviata dalla cella `[1]` crea un file `.txt` distinto in
+`Files/log/quadratura/`. Il percorso viene stampato nel notebook. All'inizio lo stato è
+`IN_CORSO`; la cella `[18]` lo aggiorna con tempi, conteggi, anomalie e risultato della scrittura
+Delta. Dei primi 100 XML non leggibili sono elencati nome ed errore; il conteggio totale è sempre
+riportato e non viene salvato il contenuto dei file.
+
+- `OK`: tabella aggiornata, nessuno degli avvisi rilevati nel riepilogo.
+- `OK_CON_AVVISI`: ad esempio XML non leggibili, anomalie del dizionario, o tabella non scritta.
+  Gli XML non leggibili **non bloccano** la pubblicazione, che può quindi essere parziale.
+- `ERRORE`: errore intercettato durante la scrittura Delta, che viene comunque rilanciato.
+  In questo caso la scrittura è indicata come `NON_CONFERMATA`, non come certamente annullata.
+- `IN_CORSO`: la cella finale non ha aggiornato il log. Può indicare un'elaborazione ancora in corso,
+  un'interruzione o un errore in una cella precedente: controllare l'esito e l'output del notebook
+  o della pipeline. Non equivale a un successo né contiene necessariamente il dettaglio dell'errore.
+
+Per mostrare anche anteprime e riepiloghi facoltativi, impostare `DEBUG = True` nella cella `[1]`.
+Gli avvisi e i controlli restano attivi anche con `DEBUG = False`. Il log richiede permessi di
+scrittura su OneLake e può contenere nomi di file e messaggi d'errore: limitarne l'accesso e definire
+una politica di conservazione. Se la scrittura del log finale fallisce dopo la scrittura Delta,
+la tabella può essere già aggiornata; verificare l'output dell'esecuzione.
+
+
 - Runtime **Fabric / Synapse** con `notebookutils` (accesso a OneLake) e `openpyxl`.
 - Per `[18]` occorrono una sessione Spark e un Lakehouse predefinito accessibile in scrittura:
   la tabella `quadratura_powerbi`, se già presente, viene sovrascritta insieme al suo schema.
