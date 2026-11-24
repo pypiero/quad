@@ -86,6 +86,27 @@ class TestLog(unittest.TestCase):
         self.assertEqual(log.count("XML non elaborato:"), 100)
         self.assertIn("test errore", log)
 
+    def test_nome_log_con_ora_italiana_e_ora_legale(self):
+        with open(harness.NOTEBOOK, encoding="utf-8") as file:
+            notebook = json.load(file)
+        # Basta la cella di configurazione, che crea il log iniziale.
+        notebook["cells"] = notebook["cells"][:3]
+        cella = notebook["cells"][2]
+        codice = "".join(cella["source"])
+        for momento, atteso in (
+            ("datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc)", "20260115T130000000000+0100"),
+            ("datetime(2026, 7, 15, 12, 0, tzinfo=timezone.utc)", "20260715T140000000000+0200"),
+            ("datetime(2026, 10, 25, 0, 30, tzinfo=timezone.utc)", "20261025T023000000000+0200"),
+            ("datetime(2026, 10, 25, 1, 30, tzinfo=timezone.utc)", "20261025T023000000000+0100"),
+        ):
+            with self.subTest(momento=momento), tempfile.TemporaryDirectory() as cartella:
+                cella["source"] = codice.replace("datetime.now(timezone.utc)", momento).splitlines(keepends=True)
+                percorso = Path(cartella) / "notebook.ipynb"
+                percorso.write_text(json.dumps(notebook), encoding="utf-8")
+                ns = self.esegui(percorso_notebook=percorso, cartella_output=cartella)
+                self.assertIn(f"quadratura_{atteso}_", ns["file_log"])
+                self.assertIn("Inizio UTC:", ns["notebookutils"].fs.file_scritti[ns["file_log"]])
+
     def test_due_esecuzioni_non_sovrascrivono_lo_stesso_log(self):
         prima, seconda = self.esegui(), self.esegui()
         self.assertNotEqual(prima["file_log"], seconda["file_log"])

@@ -403,8 +403,10 @@ Il file contiene valori, non formule: nessun ricalcolo lato Excel.
 ### Log e debug
 
 Ogni esecuzione avviata dalla cella `[1]` crea un file `.txt` distinto in
-`Files/log/quadratura/`. Il percorso viene stampato nel notebook. All'inizio lo stato è
-`IN_CORSO`; la cella `[18]` lo aggiorna con tempi, conteggi, anomalie e risultato della scrittura
+`Files/log/quadratura/`. Il nome contiene l'ora italiana (`Europe/Rome`) e il relativo offset,
+considerando automaticamente ora legale e solare. Il percorso viene stampato nel notebook; gli
+orari dentro il file sono invece in UTC e riportano esplicitamente questa indicazione.
+All'inizio lo stato è `IN_CORSO`; la cella `[18]` lo aggiorna con tempi, conteggi, anomalie e risultato della scrittura
 Delta. Dei primi 100 XML non leggibili sono elencati nome ed errore; il conteggio totale è sempre
 riportato e non viene salvato il contenuto dei file.
 
