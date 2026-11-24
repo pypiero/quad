@@ -1,8 +1,8 @@
-# Test del notebook
+# Test dei notebook
 
-Esegue il notebook `Notebook_2 (1).ipynb` **senza Fabric**: i dati di origine sono sintetici, costruiti
-in memoria. Serve a verificare che una modifica al codice non rompa la riconciliazione, prima di
-rieseguire tutto su OneLake.
+Esegue `Quadratura_Fatture.ipynb` e `Assistente_Dizionario_Codici.ipynb` **senza Fabric**: i dati di
+origine sono sintetici, costruiti in memoria. Serve a verificare che una modifica al codice non rompa
+la riconciliazione o la classificazione dei tipi di codice, prima di rieseguire tutto su OneLake.
 
 ## Requisiti
 
@@ -26,6 +26,7 @@ python tests/test_export_diagnostico.py
 python tests/test_report_match.py
 python tests/test_priorita_report.py
 python tests/test_log.py
+python tests/test_assistente_dizionario.py
 ```
 
 Il secondo comando verifica anche il caso di DataFrame vuoto e gli errori Spark; il terzo
@@ -33,7 +34,8 @@ controlla l'ordine dei codici XML e la riesecuzione del report senza modificare 
 Il quarto verifica l'export diagnostico attivato e disattivato; il quinto verifica i campi match,
 l'export Excel Power BI opzionale e la diagnostica delle regole. Il sesto verifica la scelta del
 primo valore disponibile, compresi valori mancanti, numeri e date. Il settimo verifica il log
-testuale, gli errori e il flag debug usando un filesystem finto.
+testuale, gli errori e il flag debug usando un filesystem finto. L'ottavo esegue l'assistente per il
+dizionario codici con gli stessi sostituti (più cinque XML aggiuntivi) e ne controlla le proposte.
 Le scritture Delta sono simulate: la compatibilità effettiva con Spark e il Lakehouse va verificata in Fabric.
 
 Esce con:
@@ -71,8 +73,9 @@ il test si adegua da solo.
 | File | Contenuto |
 |---|---|
 | `dati_sintetici.py` | XML, carichi, anagrafiche e dizionario (il fornitore `F005` ha il codice articolo scritto dentro la descrizione) |
-| `harness.py` | esecuzione del notebook con i sostituti sopra |
+| `harness.py` | esecuzione del notebook di quadratura con i sostituti sopra |
 | `verifica.py` | i controlli veri e propri, con il riepilogo |
+| `test_assistente_dizionario.py` | esecuzione e controlli dell'assistente per il dizionario codici |
 
 ## Cosa copre
 
@@ -94,6 +97,20 @@ il test si adegua da solo.
     il dizionario la codifica; i codici reali e la descrizione nel report restano disponibili e le
     righe che si abbinavano solo tramite descrizione restano non abbinate;
 13. **Export** — file creati e tipo delle celle nell'xlsx (date, numeri, testo).
+
+## Test dell'assistente dizionario
+
+`test_assistente_dizionario.py` esegue le celle di `Assistente_Dizionario_Codici.ipynb` così come sono,
+con un filesystem finto, le letture Excel sintetiche e l'Excel di output in una cartella temporanea.
+Aggiunge cinque XML ai `XML_FILES` sintetici: un tipo dal nome sconosciuto ma riscontrabile in
+`CART`, un `BARCODE` con GTIN e checksum valido, un `RiferimentoAmministrazione`, due fornitori
+senza carichi (uno mappato a mano con `MAPPA_PIVA_CFOR` iniettata dopo la cella `[1]`).
+
+Copre: lettura dei soli FPR12 e del tipo virtuale; classificazione `EAN` / `FORN` / `CLI` / `COD_F`;
+rifiuto di `MINSAN` e `XYZ`; il tipo nuovo riconosciuto dal solo riscontro in anagrafica; la forma
+GTIN; i `CFOR` mancanti; lo schema delle proposte e delle proposte simmetriche lato carico; regole
+inutilizzate e anomalie; i fogli dell'Excel generato e il fatto che **`Dizionario codici.xlsx` non
+venga mai sovrascritto**.
 
 ## Provare il test contro un'altra versione del notebook
 

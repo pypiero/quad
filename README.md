@@ -8,15 +8,19 @@ valori lato carico, con la differenza e lo stato dell'abbinamento.
 Il repository contiene:
 
 ```
-Notebook_2 (1).ipynb    tutto il processo (celle [1]–[18], ciascuna preceduta da Markdown)
-README.md               questo file
-docs/LOGICA.md          guida completa alla logica, cella per cella
-tests/                  test eseguibile su dati sintetici
+Quadratura_Fatture.ipynb          il processo di quadratura (celle [1]–[18], ognuna preceduta da Markdown)
+Assistente_Dizionario_Codici.ipynb aiutante: scopre i tipi di codice negli XML e propone le righe del dizionario
+README.md                         questo file
+docs/LOGICA.md                    guida completa alla logica di quadratura, cella per cella
+docs/ASSISTENTE_DIZIONARIO.md     guida all'assistente: segnali, punteggi, limiti
+tests/                            test eseguibili su dati sintetici
 ```
 
 Per capire il codice in dettaglio, la guida di riferimento è [`docs/LOGICA.md`](docs/LOGICA.md):
 le tre chiavi del processo, le celle una per una, le decisioni di progetto e come cercare un
-errore.
+errore. La compilazione del `Dizionario codici.xlsx` è supportata da
+[`Assistente_Dizionario_Codici.ipynb`](Assistente_Dizionario_Codici.ipynb) (vedi
+[§4](#4-dizionario-delle-regole)).
 
 ---
 
@@ -71,8 +75,9 @@ Le righe che non superano il perimetro non compaiono nel risultato.
 
 ## 3. Struttura del notebook
 
-Il notebook è suddiviso in 19 celle di codice separate (`[1]`–`[18]`, inclusa `[6-bis]`), ciascuna
-preceduta da una breve cella Markdown che ne descrive il ruolo, oltre a un'introduzione iniziale.
+`Quadratura_Fatture.ipynb` è suddiviso in 19 celle di codice separate (`[1]`–`[18]`, inclusa
+`[6-bis]`), ciascuna preceduta da una breve cella Markdown che ne descrive il ruolo, oltre a
+un'introduzione iniziale.
 
 | # | Cella | Cosa produce |
 |---|---|---|
@@ -191,6 +196,40 @@ Se il codice articolo è scritto **identico** sui due lati ma il dizionario non 
 `ATTENZIONE - regole diverse fra i due lati` con la tabella `regole_non_allineate`
 (`CFOR`, `Campo`, `RegolaXML`, `RegolaCarico`). Una regola non riconosciuta e una regola assente
 producono lo stesso effetto e quindi non vengono segnalate come disallineamento.
+
+### Compilare il dizionario con l'assistente
+
+Sapere **quali** `CodiceTipoXML` arrivano dagli XML è un lavoro manuale: ogni fornitore usa nomi
+diversi (`EAN`, `FORN`, `COD_F`, `CLI`, `MINSAN`, …) e un tipo non censito viene scartato in silenzio
+dalla sezione `[12]`, quindi non contribuisce all'abbinamento.
+
+[`Assistente_Dizionario_Codici.ipynb`](Assistente_Dizionario_Codici.ipynb) è un notebook autonomo che
+legge lo stesso `xml.zip` e propone le righe da copiare in `RegoleCodiciXML` (e le corrispondenti
+righe di `RegoleCodiciCarico`). Per ogni coppia `CFOR + CodiceTipoXML` incrocia tre segnali
+indipendenti:
+
+| Segnale | Cosa guarda |
+|---|---|
+| nome del tipo | dizionario di alias (`EAN`/`GTIN`/`BARCODE`, `FORN`/`SUPPLIER`, `CLI`/`CUSTOMER`, …) |
+| forma del valore | lunghezze GTIN e checksum EAN/GTIN, codici solo numerici o alfanumerici, separatori |
+| riscontro sui dati | il valore, normalizzato, esiste in `CEAN`, in `CART` o in `CARF`/`CALA`? |
+
+Dal punteggio combinato esce un `CampoCanonico` (`EAN`, `CODICE_CLIENTE`, `CODICE_FORNITORE`), una
+`RegolaNormalizzazione` e una `Confidenza`. Le righe poco sicure finiscono in un foglio
+`DaVerificare` invece di essere proposte: **l'assistente non scrive mai il dizionario**. Scrive solo
+`export/proposte_dizionario_codici.xlsx`, con anche i fornitori di cui non ha trovato il `CFOR`, le
+regole presenti nel dizionario ma mai osservate negli XML e le eventuali anomalie.
+
+Il limite strutturale è che l'XML **non contiene il `CFOR`**, mentre il dizionario è per fornitore:
+l'assistente lo ricava dai carichi con la stessa coppia `CEAS + NDOGIAA` usata dalla quadratura, con
+ripiego sulla partita IVA e sulla mappa `MAPPA_PIVA_CFOR` (compilabile a mano nella cella `[1]`).
+I dettagli, le soglie e i casi in cui la classificazione automatica non è affidabile sono in
+[`docs/ASSISTENTE_DIZIONARIO.md`](docs/ASSISTENTE_DIZIONARIO.md).
+
+Flusso consigliato: eseguire l'assistente → verificare le proposte (soprattutto `MEDIA`/`BASSA`) →
+copiare le righe `AGGIUNGI` nel dizionario → rieseguire `Quadratura_Fatture.ipynb` → controllare in
+`[12]` che i «Codici esclusi perché il tipo non è nel dizionario» calino e in `[10]` che non restino
+`regole_non_allineate`.
 
 ---
 
@@ -446,11 +485,15 @@ Il notebook si può eseguire in locale senza Fabric, su dati sintetici:
 ```bash
 pip install pandas openpyxl
 python tests/verifica.py
+python tests/test_assistente_dizionario.py
 ```
 
 Sostituisce solo `notebookutils`, le letture Excel e la scrittura su OneLake; il codice del notebook
-viene eseguito così com'è. Esce con `0` se tutti i controlli passano, `1` se qualcuno fallisce.
-Dettagli in [`tests/README.md`](tests/README.md).
+viene eseguito così com'è. `test_assistente_dizionario.py` fa lo stesso con
+`Assistente_Dizionario_Codici.ipynb` e controlla che i tipi di codice sintetici vengano classificati,
+che le proposte abbiano lo schema del dizionario e che il dizionario non venga mai sovrascritto.
+Esce con `0` se tutti i controlli passano, `1` se qualcuno fallisce. Dettagli in
+[`tests/README.md`](tests/README.md).
 
 ---
 

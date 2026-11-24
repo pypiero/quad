@@ -30,7 +30,7 @@ RADICE = Path(__file__).resolve().parents[1]
 # Si può puntare a un altro notebook con QUAD_NOTEBOOK, utile per
 # provare il test contro una versione modificata.
 NOTEBOOK = Path(
-    os.environ.get("QUAD_NOTEBOOK", RADICE / "Notebook_2 (1).ipynb")
+    os.environ.get("QUAD_NOTEBOOK", RADICE / "Quadratura_Fatture.ipynb")
 )
 
 

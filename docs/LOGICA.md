@@ -353,7 +353,11 @@ sono quasi sempre un errore di codifica, non una distinzione.
 
 ### [5] Dizionari
 
-Tre fogli Excel, tre mappe in memoria.
+Tre fogli Excel, tre mappe in memoria. Per scoprire **quali** `CodiceTipoXML` arrivano dagli XML e
+farsi proporre le righe mancanti di `RegoleCodiciXML` / `RegoleCodiciCarico` esiste il notebook
+ausiliario [`Assistente_Dizionario_Codici.ipynb`](../Assistente_Dizionario_Codici.ipynb), descritto
+in [`docs/ASSISTENTE_DIZIONARIO.md`](ASSISTENTE_DIZIONARIO.md): non modifica questo flusso e non
+scrive il dizionario.
 
 | Foglio | Chiave | Valore |
 |---|---|---|

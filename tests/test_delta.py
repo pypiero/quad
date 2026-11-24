@@ -17,7 +17,7 @@ import harness
 class TestScritturaDelta(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        with open(harness.RADICE / "Notebook_2 (1).ipynb", encoding="utf-8") as file:
+        with open(harness.RADICE / "Quadratura_Fatture.ipynb", encoding="utf-8") as file:
             celle = json.load(file)["cells"]
         indici = [
             i for i, cella in enumerate(celle)
