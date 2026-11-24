@@ -1,252 +1,135 @@
-# Assistente per il dizionario codici — come funziona
+# Assistente dizionario codici — banco di prova
 
-Guida a [`Assistente_Dizionario_Codici.ipynb`](../Assistente_Dizionario_Codici.ipynb): il notebook
-**ausiliario** che scopre quali `CodiceTipoXML` arrivano nelle fatture e propone le righe da
-aggiungere a `Dizionario codici.xlsx`. Non fa quadratura, non legge `df_merge`, non scrive Delta.
-
----
-
-## 1. Il problema
-
-La quadratura (`Quadratura_Fatture.ipynb`, sezione `[12]`) conserva solo i codici il cui
-`CodiceTipoXML` è configurato, **per quel `CFOR`**, nel foglio `RegoleCodiciXML`. Un tipo non
-configurato viene scartato: non c'è un errore, semplicemente non contribuisce alla chiave articolo e
-la riga resta `Solo XML`.
-
-Il tracciato FPR12 lascia `CodiceTipo` come testo libero. Nella pratica si incontrano, per lo stesso
-significato, `EAN`, `GTIN`, `BARCODE`, `FORN`, `COD_F`, `SUPPLIER`, `CLI`, `CUSTOMER`, `CART`, e
-accanto a questi codici che **non** sono articoli (`MINSAN`, `SSCC`, `ISBN`, `LOTTO`…). Censirli a
-mano significa aprire gli XML fornitore per fornitore.
-
-L'assistente risponde a: *«che tipi di codice ci sono, e sono EAN, codice cliente o codice
-fornitore?»*, producendo una **proposta verificabile**, non una modifica automatica.
+[`Assistente_Dizionario_Codici.ipynb`](../Assistente_Dizionario_Codici.ipynb) è un notebook
+**autonomo e volutamente semplice**: non classifica, non ha alias, punteggi o confidenze. Prova
+**tutte le combinazioni di regole** sui dati veri e conta quanti codici combaciano. Serve a decidere
+cosa scrivere nei tre fogli di `Dizionario codici.xlsx`.
 
 ---
+
+## 1. Perché
+
+La quadratura (`Quadratura_Fatture.ipynb`, sezione `[12]`) scarta in silenzio ogni `CodiceTipoXML`
+non configurato per quel `CFOR`, e le regole DDT sbagliate fanno fallire l'abbinamento in `[14]`.
+Invece di indovinare nomi e regole, si misurano: si normalizzano i codici con ciascuna regola e si
+conta quanti si ritrovano nelle anagrafiche.
 
 ## 2. Input e avvio
 
 | File | Uso |
 |---|---|
-| `xml.zip` | XML FPR12 (anche in sottocartelle) |
-| `TAB_CM_Fatture_BI.xlsx` | `CEAS`, `NDOGIAA`, `CFOR`, `CART`, `CALA` |
+| `xml.zip` | XML `FPR12` (anche in sottocartelle) |
+| `TAB_CM_Fatture_BI.xlsx` | `CART`, `CALA`, `NDOGIAB`, `CEAS`, `NDOGIAA`, `CFOR` |
 | `TAB_ANAGRAFICA_EAN.xlsx` | `CEAN` |
 | `TAB_ANAGRAFICA_CARF.xlsx` | `CARF` |
-| `Dizionario codici.xlsx` | letto in sola lettura, per il confronto |
 
-Tutti nella stessa `cartella` OneLake del notebook principale. Eseguire le celle `[1]`–`[8]` in
-ordine. Con `MODALITA_LOCALE = True` i file si leggono da `CARTELLA_LOCALE` senza `notebookutils`
-(utile per provare il notebook fuori da Fabric). `ESPORTA_PROPOSTE = False` lascia le tabelle in
-memoria senza scrivere l'Excel.
+Stessa `cartella` OneLake della quadratura. Eseguire le celle `[1]`–`[5]` in ordine. Con
+`MODALITA_LOCALE = True` si leggono i file da `CARTELLA_LOCALE` senza `notebookutils`;
+`ESPORTA_PROPOSTE = False` lascia le tabelle in memoria.
 
-Nella cella `[1]` si possono anche impostare `MAPPA_PIVA_CFOR` e le soglie
-`SOGLIA_RISCONTRO`, `MIN_RISCONTRI`, `SOGLIA_ALTA`, `SOGLIA_MEDIA`, `MARGINE_MINIMO`.
+**`Dizionario codici.xlsx` non viene letto**: il confronto con le regole esistenti si fa a occhio,
+e il file non viene mai scritto.
 
----
+## 3. Le regole provate
 
-## 3. Flusso, cella per cella
+Le 7 regole sono copiate dal registro `REGOLE` della cella `[4]` della quadratura, pulizia di base
+compresa: `RIMUOVI_SEPARATORI`, `RIMUOVI_ZERI`, `NESSUNA_REGOLA`, `TESTO_MAIUSCOLO`,
+`SOLO_NUMERI`, `ESTRAI_PRIMA_STRINGA`, `ESTRAI_ULTIMA_STRINGA`. `normalizza(valore, regola)` è
+l'unica funzione usata: la prova adotta quindi **la stessa normalizzazione** del processo.
 
-| # | Cosa fa | Produce |
-|---|---|---|
-| 1 | configurazione, percorsi, funzioni di lettura | `leggi_excel()`, costanti |
-| 2 | parsing ZIP, solo `FPR12`, via gli `<Allegati>`, una riga per `CodiceArticolo` | `df_codici`, `df_documenti`, `df_errori` |
-| 3 | attribuzione del `CFOR` | `df_codici['CFOR']`, `df_fornitori_da_mappare` |
-| 4 | forme normalizzate, set di riferimento, checksum GTIN | `RIFERIMENTI`, `df_valori` |
-| 5 | alias dei nomi, forma del valore, scelta della regola | `classifica_nome()`, `classifica_forma()`, `suggerisci_regola()` |
-| 6 | punteggio e classificazione | `df_tipi` |
-| 7 | confronto con il dizionario, proposte simmetriche | `df_proposte_xml`, `df_proposte_carico`, `df_da_verificare`, `df_regole_inutilizzate`, `df_anomalie` |
-| 8 | riepilogo, anteprime, Excel | `export/proposte_dizionario_codici.xlsx` |
+A parità di match si preferisce la regola meno distruttiva, in quest'ordine:
+`RIMUOVI_SEPARATORI` (il default), `RIMUOVI_ZERI`, `NESSUNA_REGOLA`, `TESTO_MAIUSCOLO`,
+`SOLO_NUMERI`, `ESTRAI_PRIMA_STRINGA`, `ESTRAI_ULTIMA_STRINGA`.
 
-`df_valori` ha una riga per **valore distinto** di ogni `(CFOR, CodiceTipoXML)`: `df_tipi` ha una riga
-per **tipo**, con occorrenze, valori distinti, esempi, quote di forma, riscontri e punteggi.
+## 4. Codici articolo: tutte le combinazioni, senza fatture
 
-### Il tipo virtuale
+Si estraggono i **codici univoci** di tutti gli XML (più il tipo virtuale
+`RiferimentoAmministrazione`), resi univoci su `CodiceTipoXML + valore pulito`. Non esistono colonne
+di fattura né di `CFOR` in questa tabella: lo stesso EAN ripetuto in dieci fatture è **una** riga.
 
-Come nella sezione `[3]` della quadratura, `RiferimentoAmministrazione` viene ricreato come tipo
-virtuale (`Origine = VIRTUALE`), altrimenti resterebbe invisibile a chi compila il dizionario. Viene
-segnalato ma non classificato a priori: può essere un codice articolo oppure un riferimento
-d'ordine, e la scelta dipende dal fornitore.
+Per ogni `CodiceTipoXML` si provano:
 
----
+```
+3 campi canonici × 7 regole lato XML × 7 regole lato carico = 147 combinazioni
+```
 
-## 4. Il `CFOR`: il vincolo strutturale
-
-**L'XML non contiene il `CFOR`**, ma `RegoleCodiciXML` è chiavato per `CFOR + CodiceTipoXML`.
-L'assistente lo attribuisce con la stessa logica della sezione `[11]` della quadratura, in questo
-ordine:
-
-1. `MAPPA_PIVA_CFOR` (partita IVA o denominazione → `CFOR`): scelta manuale esplicita, prioritaria;
-2. coppia `CEAS + NDOGIAA` dai carichi;
-3. ripiego sul solo `CEAS`, se quel CEAS ha un unico fornitore;
-4. altrimenti `CFOR` vuoto: la fattura finisce in `FornitoriDaMappare` con partita IVA (dall'intestazione
-   o dal nome del file SDI), denominazione e un esempio di CEAS.
-
-Una riga senza `CFOR` **non viene proposta**, nemmeno se il campo canonico è stato dedotto: finisce
-in `DaVerificare` con `Azione = CFOR_MANCANTE`. Con più `CFOR` per la stessa fattura si tiene il
-primo in ordine alfabetico e si stampa un avviso, come fa la quadratura.
-
----
-
-## 5. I tre segnali
-
-### 5.1 Nome del tipo
-
-`ALIAS_GREZZI` (cella `[5]`) è una tabella di sinonimi: `EAN`, `EAN13`, `GTIN`, `BARCODE`,
-`CODICE A BARRE` → `EAN`; `FORN`, `COD_F`, `SUPPLIER`, `CARF` → `CODICE_FORNITORE`; `CLI`,
-`CUSTOMER`, `CART`, `CODICE INTERNO` → `CODICE_CLIENTE`. I nomi vengono normalizzati (accenti,
-punteggiatura, maiuscole) prima del confronto.
-
-Se il nome non è in tabella si cercano parole chiave (`EAN|GTIN|UPC|BARCODE`, `FORN|SUPPLIER|…`,
-`CLI|CUSTOMER|CART|INTERN|…`): un nome che ne contiene per **due campi diversi** è ambiguo e non
-assegna punti. `TIPI_NOTI` elenca i tipi che non sono codici articolo (`MINSAN`, `AIC`, `SSCC`,
-`ISBN`, `LOTTO`, `Descrizione`, `RiferimentoAmministrazione`, `(senza tipo)`): vengono segnalati con
-una motivazione, non classificati.
-
-> Aggiungere un sinonimo nuovo significa aggiungere una stringa a `ALIAS_GREZZI`. È l'unico punto
-> da mantenere quando arriva un fornitore con un nome inedito.
-
-### 5.2 Forma del valore
-
-- **GTIN valido**: 8, 12, 13 o 14 sole cifre con checksum GS1 (modulo 10) corretto → indizio
-  forte di `EAN`;
-- **solo cifre** di lunghezza 6–14 ma checksum non valido → indizio debole (molti codici interni
-  sono numerici, e negli XML reali il checksum non sempre è rispettato);
-- **alfanumerico** → la forma non distingue cliente da fornitore: non assegna punti.
-
-`QuotaEANValida`, `QuotaSoloCifre`, `QuotaAlfanumerico` e `QuotaSeparatori` sono in `df_tipi`, così
-la decisione si può rileggere.
-
-### 5.3 Riscontro sui dati aziendali
-
-Per ogni valore si calcolano fino a tre forme: pulito/maiuscolo, senza separatori e zeri iniziali,
-sole cifre (quest'ultima **solo se il valore non contiene lettere**, per evitare che `ART002` diventi
-`2` e combaci per caso con un codice numerico). Le stesse forme si costruiscono sui valori di
-riferimento:
-
-| Campo canonico | Riferimento |
+| Campo canonico | Valori di riferimento |
 |---|---|
-| `EAN` | `CEAN` (anagrafica EAN) |
-| `CODICE_CLIENTE` | `CART` (carichi) |
+| `EAN` | `CEAN` |
+| `CODICE_CLIENTE` | `CART` |
 | `CODICE_FORNITORE` | `CARF` + `CALA` |
 
-I set sono **per `CFOR`** quando disponibili, altrimenti globali. Il riscontro è **indicativo**:
-serve a pesare un'ipotesi, non è il join della quadratura (che resta governato dal dizionario). Per
-questo conta la quota di valori distinti trovati, non il numero di occorrenze.
+I codici XML si normalizzano con `RegolaXML`, i valori di riferimento con `RegolaCarico`; si conta
+quanti codici univoci combaciano. Non servono alias: un tipo chiamato `GTIN` o `CODICE_27` viene
+riconosciuto perché i suoi valori, normalizzati, stanno in `CEAN` o in `CART`.
 
----
+Le chiavi normalizzate di 1–2 caratteri non vengono contate come match (`MIN_LUNGHEZZA_CHIAVE = 3`):
+con `SOLO_NUMERI`, `ART-002` diventa `2` e combacerebbe per caso con `C002`. Le regole si provano
+comunque tutte; si scarta solo l'accoppiamento evidentemente accidentale. Per i DDT questo filtro
+non si applica, perché numeri di bolla corti come `H/1` sono normali.
 
-## 6. Punteggio e confidenza
+## 5. DDT: tutte le combinazioni, dentro ogni fattura
 
-| Segnale | Peso |
-|---|---|
-| alias esatto sul nome | +4,0 |
-| parola chiave sul nome | +2,5 |
-| forma GTIN con checksum valido | +4,0 |
-| forma solo numerica compatibile (checksum non valido) | +1,5 |
-| riscontro forte: ≥`MIN_RISCONTRI` valori **e** quota ≥`SOGLIA_RISCONTRO` | +5,0 (+1,5 se il riscontro è esclusivo) |
-| riscontro debole: 1 valore | +2,0 (+0,5 per ogni valore in più, max +1,5) |
-| nome e riscontro concordi | +1,5 |
+Qui il confronto resta **dentro la singola fattura** (`CEAS + numero fattura`): si prendono i
+`NumeroDDT` dell'XML e gli `NDOGIAB` dei carichi **di quella fattura**, e si provano le 7 × 7
+regole. Un DDT della fattura A non può mai incrociare la bolla della fattura B: senza questo
+vincolo `A/001` di una fattura combacerebbe con `A-001` di un'altra.
 
-Vince il punteggio più alto, ma servono almeno **2,5 punti** e un **margine di 1,5** sul secondo
-classificato. Un nome che indica un campo mentre i dati (o un GTIN valido) ne indicano un altro è un
-`CONFLITTO`: il campo resta vuoto. Se il nome è sconosciuto e la decisione poggia solo sul riscontro,
-la confidenza massima è `MEDIA`.
+I match si sommano su tutte le fatture, complessivamente (`CFOR = TUTTI`) e per fornitore. Le
+fatture senza DDT su uno dei due lati non entrano nel conteggio.
 
-| Confidenza | Effetto |
-|---|---|
-| `ALTA` | proposta `AGGIUNGI` (se il tipo è assente) |
-| `MEDIA` | proposta `AGGIUNGI`, ma da rileggere |
-| `BASSA` | riga presente in `ProposteXML` ma `Azione = DA_VERIFICARE` |
-| `NESSUNA` | nessun campo proposto: va in `DaVerificare` |
+## 6. Output
 
-### Regola di normalizzazione
-
-`suggerisci_regola()` propone `RIMUOVI_SEPARATORI` quando i valori hanno separatori o zeri iniziali,
-`ESTRAI_PRIMA_STRINGA` / `ESTRAI_ULTIMA_STRINGA` quando il codice utile è una **parte** del valore
-(un valore di un solo pezzo non viene mai "estratto"), `SOLO_NUMERI` quando c'è testo davanti a un
-riferimento numerico. Senza evidenze scrive comunque il default in modo esplicito.
-
-La regola suggerita vale **solo per le righe nuove**: su una riga già presente l'assistente non
-propone di cambiarla, perché le regole dei due lati possono essere state scelte apposta. Segnala
-solo le regole non riconosciute, che finiscono comunque in `AnomalieDizionario`.
-
----
-
-## 7. Output
-
-`export/proposte_dizionario_codici.xlsx` (in `MODALITA_LOCALE` il file è scritto direttamente in
-`CARTELLA_LOCALE`, sempre con lo stesso nome):
+`export/proposte_dizionario_codici.xlsx` (in `MODALITA_LOCALE` viene scritto in `CARTELLA_LOCALE`):
 
 | Foglio | Contenuto |
 |---|---|
-| `ProposteXML` | prime 5 colonne = schema di `RegoleCodiciXML`, poi metadati (`Azione`, `Confidenza`, `Motivazione`, …) |
-| `ProposteCarico` | prime 4 colonne = schema di `RegoleCodiciCarico`, una riga per `CFOR + CampoCanonico` |
-| `DaVerificare` | tipi non classificati, conflitti, `CFOR_MANCANTE`, con tutte le evidenze |
-| `DettaglioTipi` | audit completo: conteggi, quote, punteggi, motivazioni |
-| `FornitoriDaMappare` | partita IVA / denominazione / CEAS di chi non ha `CFOR` |
-| `RegoleInutilizzate` | regole configurate ma mai osservate negli XML analizzati |
-| `AnomalieDizionario` | `CampoCanonico` non ammesso, regola sconosciuta, chiavi duplicate |
-| `Riepilogo` | conteggi dell'esecuzione |
+| `ProposteCodici` | una riga per `CodiceTipoXML`: miglior `CampoCanonico`, `RegolaXML`, `RegolaCarico`, `Match`, `CodiciUnivoci`, `Quota`, `CFOR osservati`, `Stato`, `EsempiMatch` |
+| `ProposteDDT` | una riga per `CFOR` (+ `TUTTI`): miglior `RegolaDDTXML`, `RegolaDDTCarico`, `Match`, `DDTXML`, `Quota`, `Fatture` |
+| `GrigliaCodici` | tutte le 147 combinazioni per tipo, con i relativi match |
+| `GrigliaDDT` | le 49 combinazioni complessive |
 
-`Azione`: `AGGIUNGI`, `GIA_PRESENTE`, `VERIFICA_REGOLA`, `VERIFICA_CONFLITTO`, `DA_VERIFICARE`,
-`CFOR_MANCANTE`. **Si copiano solo le righe `AGGIUNGI` dopo averle verificate**; le colonne dopo le
-prime cinque (o quattro) sono metadati e non vanno nel dizionario.
+`Stato = NESSUN MATCH` significa che nessuna combinazione ha trovato riscontro: campo e regole
+restano vuoti e quel tipo va guardato a mano (per esempio `MINSAN`, `SSCC`, lotti).
 
-Le `ProposteCarico` esistono perché una riga assente sul lato carichi ricade su `RIMUOVI_SEPARATORI`,
-mentre `NESSUNA_REGOLA` mantiene i separatori: il notebook principale segnala
-«regole diverse fra i due lati» (sezione `[10]`). Proporre regole simmetriche evita il disallineamento.
+Come si copiano le righe:
 
-> **`Dizionario codici.xlsx` non viene mai scritto.** L'assistente apre il file in lettura e produce
-> un file separato. La scelta finale resta a chi conosce gli articoli del fornitore.
+- `ProposteCodici` → `RegoleCodiciXML` (`CFOR` × `CodiceTipoXML` → `CampoCanonico`,
+  `RegolaNormalizzazione` = `RegolaXML`) e `RegoleCodiciCarico` (per ogni `CFOR osservati` +
+  `CampoCanonico`, `RegolaNormalizzazione` = `RegolaCarico`);
+- `ProposteDDT` → `RegoleDDT` (`CFOR` → `RegolaDDTXML`, `RegolaDDTCarico`). La riga `TUTTI` è un
+  riassunto: se i fornitori si comportano diversamente, usare le righe per `CFOR`.
 
----
+## 7. Limiti
 
-## 8. Limiti: quando l'automatismo non basta
-
-1. **Cliente vs fornitore non si distingue dalla forma del valore**: entrambi sono spesso stringhe
-   alfanumeriche. Servono il nome del tipo o il riscontro in `CART` / `CARF`. Senza entrambi il tipo
-   resta `DA_VERIFICARE`, ed è voluto.
-2. **L'EAN non è garantito dal checksum**: il controllo GS1 è un indizio, non un filtro. Un codice
-   interno di 13 cifre può sembrare un GTIN; per questo la forma numerica da sola pesa 1,5 e non
-   produce mai `ALTA`.
-3. **Il riscontro può avere falsi positivi**: le tre forme normalizzate sono più permissive del join
-   reale. Un solo valore che combacia pesa 2,0 e non basta da solo a classificare.
-4. **Fatture senza carichi**: senza `CEAS + NDOGIAA` e senza `MAPPA_PIVA_CFOR` non c'è `CFOR`, quindi
-   nessuna proposta. È il caso dei fornitori nuovi: va compilata la mappa nella cella `[1]`.
-5. **Tipi non articolo**: mappare `MINSAN`, `SSCC` o un lotto come `EAN`/`CODICE_*` creerebbe
-   abbinamenti falsi. Meglio lasciarli fuori finché una persona non decide.
-6. **Perimetro**: solo documenti `versione="FPR12"` presenti in `xml.zip`. Altri tracciati e XML non
-   letti (`df_errori`) non entrano nelle statistiche.
-7. **Sinonimi**: un nome mai visto e con valori assenti dalle anagrafiche resta non classificato;
-   si aggiunge l'alias in `ALIAS_GREZZI` e si riesegue.
-8. **Regole esistenti**: non vengono mai riscritte, quindi l'assistente non corregge da sé un
-   dizionario sbagliato; lo segnala (`VERIFICA_CONFLITTO`, `AnomalieDizionario`).
-9. **Nessuna verifica a valle**: la bontà di una proposta si vede solo rieseguendo la quadratura.
+1. **È una misura, non una verità**: un match dice che una certa regola fa coincidere due stringhe,
+   non che il campo canonico sia semanticamente corretto. In caso di parità guardare `GrigliaCodici`
+   ed `EsempiMatch`.
+2. **Le anagrafiche devono contenere i codici**: un tipo i cui valori non compaiono in `CEAN`,
+   `CART` o `CARF`/`CALA` dà zero match anche se è un codice articolo valido.
+3. **`SOLO_NUMERI` e le regole di estrazione** possono accorciare i valori: il filtro sulle chiavi
+   corte limita i falsi positivi sui codici articolo, ma le combinazioni restano visibili in griglia.
+4. **I DDT si confrontano solo per testo**: la quadratura ha anche i livelli `DATA_UNIVOCA` e
+   `UNICO_RESIDUO`, che qui non vengono simulati. Le regole migliori sono quindi quelle che
+   massimizzano il match di livello `TESTO`.
+5. **`CFOR`**: per i codici articolo è solo un'etichetta ricavata dai carichi (`CEAS + NDOGIAA`);
+   per i DDT viene dai carichi della fattura. Le fatture senza carichi non producono DDT confrontabili.
+6. **Perimetro**: solo `FPR12` presenti nello ZIP; gli XML non letti sono in `df_errori`.
+7. **Nessuna scrittura automatica**: si copia a mano, poi si riesegue la quadratura e si controllano
+   in `[12]` i «Codici esclusi perché il tipo non è nel dizionario» e in `[10]` le
+   `regole_non_allineate`.
 
 ---
 
-## 9. Flusso consigliato e verifica
-
-1. Eseguire l'assistente sullo ZIP corrente.
-2. Verificare `ProposteXML` (soprattutto `MEDIA`), `DaVerificare` e `FornitoriDaMappare`; eventualmente
-   mappare i `CFOR` mancanti e rieseguire.
-3. Copiare le righe `AGGIUNGI` in `RegoleCodiciXML` e le relative `AGGIUNGI` in
-   `RegoleCodiciCarico`.
-4. Rieseguire `Quadratura_Fatture.ipynb` e controllare:
-   - sezione `[12]`: deve calare «Codici esclusi perché il tipo non è nel dizionario»;
-   - sezione `[10]`: `regole_non_allineate` deve restare vuota;
-   - sezione `[6-bis]`: nessuna regola non riconosciuta o chiave duplicata;
-   - report: meno righe `Solo XML` con `Documento trovato`.
-
----
-
-## 10. Test
+## 8. Test
 
 ```bash
 python tests/test_assistente_dizionario.py
 ```
 
-Esegue le celle del notebook sui dati sintetici (`tests/dati_sintetici.py`) più cinque XML
-aggiuntivi: un tipo dal nome sconosciuto ma riscontrabile in `CART`, GTIN con checksum valido, il
-tipo virtuale, due fornitori senza carichi (uno mappato a mano). Controlla la classificazione di
-`EAN`/`FORN`/`CLI`/`COD_F`, il rifiuto di `MINSAN`/`XYZ`, lo schema delle proposte, le anomalie del
-dizionario, i fogli dell'Excel e che **`Dizionario codici.xlsx` non venga mai sovrascritto**.
+Esegue le celle su dati sintetici più tre XML aggiuntivi. Controlla che le 7 regole normalizzino
+**esattamente** come la quadratura, che i codici siano univoci e senza colonne di fattura, che la
+griglia contenga tutte le 147 combinazioni per tipo, che tipi dal nome inedito (`GTIN`,
+`CODICE_27`) vengano individuati dal solo riscontro, che `MINSAN`/`XYZ` non producano proposte, che
+i DDT siano confrontati per fattura, che le proposte DDT esistano per `TUTTI` e per `F001`, e che
+l'Excel abbia 4 fogli senza mai leggere né scrivere il dizionario.

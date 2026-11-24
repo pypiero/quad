@@ -2,8 +2,8 @@
 Test di Assistente_Dizionario_Codici.ipynb su dati sintetici.
 
 Esegue le celle del notebook così come sono, sostituendo solo
-notebookutils.fs, pd.read_excel e pd.ExcelWriter (come tests/harness.py).
-Non richiede OneLake né Fabric.
+notebookutils.fs, pd.read_excel e pd.ExcelWriter. Non richiede
+OneLake né Fabric.
 
 Uso, dalla radice del repository:
 
@@ -13,6 +13,7 @@ Uso, dalla radice del repository:
 import json
 import re
 import tempfile
+import unicodedata
 import unittest
 import zipfile
 from pathlib import Path
@@ -24,6 +25,7 @@ import dati_sintetici
 
 RADICE = Path(__file__).resolve().parents[1]
 NOTEBOOK = RADICE / "Assistente_Dizionario_Codici.ipynb"
+PRINCIPALE = RADICE / "Quadratura_Fatture.ipynb"
 
 
 class _FsFinto:
@@ -45,80 +47,59 @@ class _NotebookutilsFinto:
         self.fs = _FsFinto()
 
 
-def _gtin_valido(prime_12_cifre):
-    """Aggiunge la cifra di controllo GS1 (EAN13)."""
-    cifre = [int(c) for c in prime_12_cifre]
-    totale = sum(
-        c * (3 if i % 2 == 0 else 1)
-        for i, c in enumerate(reversed(cifre))
-    )
-    return prime_12_cifre + str((10 - totale % 10) % 10)
-
-
 def _xml_aggiuntivi():
     """
-    XML extra (in una sottocartella dello ZIP, così il nome file
-    senza estensione resta il CEAS atteso dai carichi).
+    Pochi XML in più (in una sottocartella, così il nome file senza
+    estensione resta il CEAS atteso dai carichi):
 
-    - un tipo dal nome sconosciuto ma riscontrabile in CART (F001);
-    - un tipo BARCODE con GTIN validi (F002);
-    - il tipo virtuale RiferimentoAmministrazione;
-    - due fornitori senza carichi: uno non mappato, uno mappato
-      a mano con MAPPA_PIVA_CFOR.
+    - GTIN e CODICE_27: nomi di tipo mai visti, ma valori presenti
+      rispettivamente in CEAN e in CART (il banco di prova non ha
+      alias, deve trovarli normalizzando e basta);
+    - un RiferimentoAmministrazione (tipo virtuale);
+    - un DDT "A/001" su una fattura il cui carico ha "DIVERSO/77":
+      se il confronto non fosse per fattura, "A/001" incrocerebbe
+      invece la bolla "A-001" di un'altra fattura;
+    - un file non FPR12 con un codice, che deve essere scartato.
     """
-    gtin_a = _gtin_valido("800150030280")
-    gtin_b = _gtin_valido("800150030281")
+    riga_riferimento = (
+        "<DettaglioLinee><NumeroLinea>4</NumeroLinea>"
+        "<Descrizione>VOCE</Descrizione>"
+        "<RiferimentoAmministrazione>C001"
+        "</RiferimentoAmministrazione></DettaglioLinee>"
+    )
 
     return {
         "nuovi/IT01111111111_00001.xml": dati_sintetici.xml_documento(
-            "00001", "2025-01-10", "",
+            "00001", "2025-01-10",
+            dati_sintetici.ddt("A/001", "2025-01-05", [1, 2, 3, 4]),
             "".join([
                 dati_sintetici.linea(
-                    1, "ARTICOLO NUOVO", 1, 1, 1,
+                    1, "GTIN", 1, 1, 1,
+                    codici=[("GTIN", "8001111111111")],
+                ),
+                dati_sintetici.linea(
+                    2, "CODICE 27 A", 1, 1, 1,
                     codici=[("CODICE_27", "C001")],
                 ),
                 dati_sintetici.linea(
-                    2, "ARTICOLO NUOVO 2", 1, 1, 1,
+                    3, "CODICE 27 B", 1, 1, 1,
                     codici=[("CODICE_27", "C002")],
                 ),
-            ]),
-        ),
-        "nuovi/IT02222222222_00007.xml": dati_sintetici.xml_documento(
-            "7", "2025-02-10", "",
-            "".join([
-                dati_sintetici.linea(
-                    1, "BARCODE A", 1, 1, 1,
-                    codici=[("BARCODE", gtin_a)],
-                ),
-                dati_sintetici.linea(
-                    2, "BARCODE B", 1, 1, 1,
-                    codici=[("BARCODE", gtin_b)],
-                ),
+                riga_riferimento,
             ]),
         ),
         "nuovi/IT01111111111_00002.xml": dati_sintetici.xml_documento(
-            "00002", "2025-03-10", "",
-            (
-                "<DettaglioLinee><NumeroLinea>1</NumeroLinea>"
-                "<Descrizione>VOCE</Descrizione>"
-                "<RiferimentoAmministrazione>C001"
-                "</RiferimentoAmministrazione></DettaglioLinee>"
-            ),
+            "00002", "2025-02-10",
+            dati_sintetici.ddt("A/001", "2025-02-05", [1]),
+            dati_sintetici.linea(1, "VOCE", 1, 1, 1),
         ),
-        "nuovi/IT09999999999_00050.xml": dati_sintetici.xml_documento(
-            "50", "2025-04-10", "",
+        "nuovi/IT04444444444_00011.xml": dati_sintetici.xml_documento(
+            "11", "2025-03-10", "",
             dati_sintetici.linea(
-                1, "PRODOTTO", 1, 1, 1,
-                codici=[("FORN", "ART-999")],
+                1, "NON FPR12", 1, 1, 1,
+                codici=[("NON_FPR12", "XYZ1")],
             ),
-        ),
-        "nuovi/IT08888888888_00060.xml": dati_sintetici.xml_documento(
-            "60", "2025-05-10", "",
-            dati_sintetici.linea(
-                1, "PRODOTTO MAPPATO", 1, 1, 1,
-                codici=[("FORN", "ART-777")],
-            ),
-        ),
+        ).replace('versione="FPR12"', 'versione="FPA11"'),
     }
 
 
@@ -126,10 +107,9 @@ def _leggi_excel_finta(percorso, sheet_name=None, **kwargs):
     nome = Path(str(percorso)).name
 
     if "Dizionario" in nome:
-        return {
-            foglio: tabella.copy()
-            for foglio, tabella in dati_sintetici.DIZIONARIO.items()
-        }
+        raise AssertionError(
+            "L'assistente semplificato non deve leggere il dizionario"
+        )
     if "TAB_CM_Fatture_BI" in nome:
         return dati_sintetici.CARICHI.copy()
     if "ANAGRAFICA_EAN" in nome:
@@ -142,16 +122,19 @@ def _leggi_excel_finta(percorso, sheet_name=None, **kwargs):
     )
 
 
-def _esegui_notebook():
-    with open(NOTEBOOK, encoding="utf-8") as file:
+def _celle_notebook(percorso):
+    with open(percorso, encoding="utf-8") as file:
         notebook = json.load(file)
-
-    celle = [
+    return [
         "".join(cella["source"])
         for cella in notebook["cells"]
         if cella.get("cell_type") == "code"
         and "".join(cella["source"]).strip()
     ]
+
+
+def _esegui_notebook():
+    celle = _celle_notebook(NOTEBOOK)
 
     trovato = re.search(
         r'zip_locale_python\s*=\s*"([^"]+)"',
@@ -170,18 +153,23 @@ def _esegui_notebook():
         }.items():
             archivio.writestr(nome, contenuto)
 
-    cartella_output = Path(tempfile.mkdtemp(prefix="quad_assistente_"))
+    cartella_output = Path(tempfile.mkdtemp(prefix="quad_prove_"))
     scritture = []
+    letture = []
 
     lettura_originale = pd.read_excel
     scrittore_originale = pd.ExcelWriter
+
+    def lettura_finta(percorso, **kwargs):
+        letture.append(str(percorso))
+        return _leggi_excel_finta(percorso, **kwargs)
 
     def scrittore_redirect(percorso, **kwargs):
         scritture.append(str(percorso))
         destinazione = cartella_output / Path(str(percorso)).name
         return scrittore_originale(destinazione, **kwargs)
 
-    pd.read_excel = _leggi_excel_finta
+    pd.read_excel = lettura_finta
     pd.ExcelWriter = scrittore_redirect
 
     namespace = {
@@ -197,235 +185,271 @@ def _esegui_notebook():
                 compile(codice, f"cella_{indice}", "exec"),
                 namespace,
             )
-            # Come per i flag del notebook principale, si inietta
-            # una configurazione subito dopo la cella [1].
-            if indice == 1:
-                namespace["MAPPA_PIVA_CFOR"] = {
-                    "IT08888888888": "F088",
-                }
     finally:
         pd.read_excel = lettura_originale
         pd.ExcelWriter = scrittore_originale
 
-    return namespace, cartella_output, scritture
+    return namespace, cartella_output, scritture, letture
 
 
 class TestAssistenteDizionario(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.ns, cls.cartella, cls.scritture = _esegui_notebook()
+        (
+            cls.ns,
+            cls.cartella,
+            cls.scritture,
+            cls.letture,
+        ) = _esegui_notebook()
 
-    def _riga_tipo(self, cfor, tipo_chiave):
-        df = self.ns["df_tipi"]
-        righe = df.loc[
-            (df["CFOR"] == cfor)
-            & (df["TipoChiave"] == tipo_chiave)
-        ]
-        self.assertEqual(
-            len(righe), 1,
-            f"attesa una riga per ({cfor}, {tipo_chiave}), "
-            f"trovate {len(righe)}",
+    def test_1_regole_identiche_al_notebook_principale(self):
+        """Il banco di prova normalizza come la quadratura."""
+        celle = _celle_notebook(PRINCIPALE)
+        codice_regole = next(
+            c for c in celle
+            if "REGOLE = {" in c and "def normalizza(" in c
         )
-        return righe.iloc[0]
+        ns_principale = {
+            "pd": pd,
+            "unicodedata": unicodedata,
+            "DEBUG": False,
+            "display": lambda *a, **k: None,
+        }
+        exec(
+            compile(codice_regole, "regole_principali", "exec"),
+            ns_principale,
+        )
 
-    def test_1_lettura_xml(self):
-        df_codici = self.ns["df_codici"]
-        df_documenti = self.ns["df_documenti"]
-
-        self.assertFalse(df_codici.empty)
-        self.assertFalse(df_documenti.empty)
         self.assertEqual(
-            set(self.ns["df_errori"].columns),
-            {"File", "Errore"},
+            set(self.ns["REGOLE_NOMI"]),
+            set(ns_principale["REGOLE"]),
+        )
+
+        valori = [
+            "ART-002", "art-002", "8001111111111", "00123",
+            "A/001", "C001", "", "  x  ", "ÀRT", "ART/002",
+            "123.45", "0", None, 12.0, "A 001", "F22-1",
+            "SCONTO-9", "030999888",
+        ]
+        for regola in self.ns["REGOLE_NOMI"]:
+            for valore in valori:
+                self.assertEqual(
+                    self.ns["normalizza"](valore, regola),
+                    ns_principale["normalizza"](valore, regola),
+                    f"valore={valore!r}, regola={regola}",
+                )
+
+    def test_2_codici_univoci_senza_fatture(self):
+        df = self.ns["df_codici_univoci"]
+        self.assertEqual(
+            list(df.columns),
+            ["CodiceTipoXML", "CodiceValoreXML", "ValorePulito"],
         )
         self.assertTrue(self.ns["df_errori"].empty)
 
-        tipi = set(df_codici["TipoChiave"])
+        # Lo stesso EAN compare in quattro fatture diverse: una riga sola.
+        ean = df.loc[
+            (df["CodiceTipoXML"] == "EAN")
+            & (df["ValorePulito"] == "8001111111111")
+        ]
+        self.assertEqual(len(ean), 1)
+
+        tipi = set(df["CodiceTipoXML"])
         for atteso in (
             "EAN", "FORN", "CLI", "COD_F", "MINSAN", "XYZ",
-            "BARCODE", "CODICE_27", "RIFERIMENTOAMMINISTRAZIONE",
+            "GTIN", "CODICE_27", "RiferimentoAmministrazione",
         ):
-            self.assertIn(atteso, tipi, f"tipo {atteso} non letto")
+            self.assertIn(atteso, tipi)
+        self.assertNotIn("NON_FPR12", tipi)
 
-        # Solo FPR12: il file FPA11 deve essere stato scartato.
-        self.assertNotIn(
-            "IT04444444444_00011.xml",
-            set(df_documenti["FileXML"]),
+    def test_3_griglia_tutte_le_combinazioni(self):
+        df = self.ns["df_griglia_codici"]
+        n_tipi = self.ns["df_codici_univoci"][
+            "CodiceTipoXML"
+        ].nunique()
+
+        self.assertEqual(
+            len(df),
+            n_tipi * 3 * len(self.ns["REGOLE_NOMI"]) ** 2,
         )
+        self.assertEqual(
+            set(df["CampoCanonico"]),
+            {"EAN", "CODICE_CLIENTE", "CODICE_FORNITORE"},
+        )
+        self.assertEqual(
+            set(df["RegolaXML"]), set(self.ns["REGOLE_NOMI"])
+        )
+        self.assertEqual(
+            set(df["RegolaCarico"]), set(self.ns["REGOLE_NOMI"])
+        )
+        self.assertTrue((df["Quota"] <= 1).all())
 
-        virtuali = df_codici.loc[
-            df_codici["Origine"] == "VIRTUALE"
+        # Una combinazione nota deve dare il match atteso.
+        riga = df.loc[
+            (df["CodiceTipoXML"] == "EAN")
+            & (df["CampoCanonico"] == "EAN")
+            & (df["RegolaXML"] == "RIMUOVI_SEPARATORI")
+            & (df["RegolaCarico"] == "RIMUOVI_SEPARATORI")
         ]
-        self.assertFalse(virtuali.empty)
-        self.assertTrue(
-            (virtuali["CodiceTipoXML"] == "RiferimentoAmministrazione")
-            .all()
+        self.assertEqual(len(riga), 1)
+        self.assertEqual(riga.iloc[0]["Match"], 1)
+
+    def test_4_proposte_codici(self):
+        proposte = self.ns["df_proposte_codici"].set_index(
+            "CodiceTipoXML"
         )
 
-    def test_2_tipi_noti_e_non_articolo(self):
         attesi = {
-            ("F001", "EAN"): "EAN",
-            ("F001", "FORN"): "CODICE_FORNITORE",
-            ("F001", "CLI"): "CODICE_CLIENTE",
-            ("F002", "COD_F"): "CODICE_FORNITORE",
+            "EAN": "EAN",
+            "FORN": "CODICE_FORNITORE",
+            "CLI": "CODICE_CLIENTE",
+            "COD_F": "CODICE_FORNITORE",
+            "GTIN": "EAN",
+            "CODICE_27": "CODICE_CLIENTE",
         }
-        for (cfor, tipo), campo in attesi.items():
-            riga = self._riga_tipo(cfor, tipo)
+        for tipo, campo in attesi.items():
             self.assertEqual(
-                riga["CampoCanonico"], campo,
-                f"{cfor}/{tipo}: campo errato. {riga['Motivazione']}",
+                proposte.loc[tipo, "CampoCanonico"],
+                campo,
+                f"{tipo}: {proposte.loc[tipo, 'EsempiMatch']}",
             )
-            self.assertEqual(riga["Confidenza"], "ALTA")
-            self.assertEqual(riga["Azione"], "GIA_PRESENTE")
+            self.assertGreater(proposte.loc[tipo, "Match"], 0)
+            self.assertEqual(proposte.loc[tipo, "Stato"], "OK")
+            self.assertIn(
+                proposte.loc[tipo, "RegolaXML"],
+                self.ns["REGOLE_NOMI"],
+            )
+            self.assertIn(
+                proposte.loc[tipo, "RegolaCarico"],
+                self.ns["REGOLE_NOMI"],
+            )
 
-        for cfor, tipo in (("F006", "MINSAN"), ("F005", "XYZ")):
-            riga = self._riga_tipo(cfor, tipo)
-            self.assertEqual(riga["CampoCanonico"], "")
-            self.assertEqual(riga["Confidenza"], "NESSUNA")
-            self.assertEqual(riga["Azione"], "DA_VERIFICARE")
+        # Tipi che non sono codici articolo: nessun match, nessuna proposta.
+        for tipo in ("MINSAN", "XYZ"):
+            self.assertEqual(
+                proposte.loc[tipo, "CampoCanonico"], ""
+            )
+            self.assertEqual(proposte.loc[tipo, "Match"], 0)
+            self.assertEqual(
+                proposte.loc[tipo, "Stato"], "NESSUN MATCH"
+            )
 
-        da_verificare = self.ns["df_da_verificare"]
-        self.assertIn(
-            "MINSAN", set(da_verificare["CodiceTipoXML"])
-        )
-        self.assertIn(
-            "ministeriale",
-            " ".join(
-                da_verificare.loc[
-                    da_verificare["CodiceTipoXML"] == "MINSAN",
-                    "Motivazione",
-                ]
-            ).lower(),
-        )
+        # Ogni proposta è la riga con più match della sua griglia.
+        griglia = self.ns["df_griglia_codici"]
+        for tipo in attesi:
+            self.assertEqual(
+                proposte.loc[tipo, "Match"],
+                griglia.loc[
+                    griglia["CodiceTipoXML"] == tipo, "Match"
+                ].max(),
+            )
 
-    def test_3_tipo_nuovo_riconosciuto_dal_riscontro(self):
-        # Nome mai visto, ma entrambi i valori esistono in CART:
-        # il riscontro in anagrafica deve bastare (confidenza MEDIA).
-        riga = self._riga_tipo("F001", "CODICE_27")
-        self.assertEqual(
-            riga["CampoCanonico"], "CODICE_CLIENTE",
-            riga["Motivazione"],
-        )
-        self.assertEqual(riga["Confidenza"], "MEDIA")
-        self.assertEqual(riga["RiscCODICE_CLIENTE"], 2)
-        self.assertEqual(riga["Azione"], "AGGIUNGI")
+    def test_5_ddt_confronto_per_fattura(self):
+        """Un DDT non può incrociare la bolla di un'altra fattura."""
+        fatture = self.ns["fatture"]
+        self.assertGreater(len(fatture), 0)
+        normalizza = self.ns["normalizza"]
+        regola = "RIMUOVI_SEPARATORI"
 
-    def test_4_forma_gtin(self):
-        riga = self._riga_tipo("F002", "BARCODE")
-        self.assertEqual(riga["CampoCanonico"], "EAN")
-        self.assertEqual(riga["Confidenza"], "ALTA")
-        self.assertEqual(riga["QuotaEANValida"], 1.0)
-        self.assertEqual(riga["Azione"], "AGGIUNGI")
+        riferimento_globale = set()
+        per_fattura = 0
+        globalmente = 0
 
-    def test_5_tipo_virtuale_non_classificato(self):
-        riga = self._riga_tipo(
-            "F001", "RIFERIMENTOAMMINISTRAZIONE"
-        )
-        self.assertEqual(riga["Origine"], "VIRTUALE")
-        self.assertEqual(riga["CampoCanonico"], "")
+        for fattura in fatture:
+            self.assertEqual(
+                len(fattura["ChiaveDocumento"]), 2
+            )
+            locale = {
+                k
+                for k in (
+                    normalizza(v, regola)
+                    for v in fattura["Carico"]
+                )
+                if k
+            }
+            riferimento_globale |= locale
 
-        da_verificare = self.ns["df_da_verificare"]
-        righe = da_verificare.loc[
-            da_verificare["CodiceTipoXML"]
-            == "RiferimentoAmministrazione"
+            for valore in fattura["XML"]:
+                chiave = normalizza(valore, regola)
+                per_fattura += int(chiave in locale)
+
+        # Conto "sbagliato": confronto globale, senza il vincolo
+        # della fattura. Deve trovare almeno un match in più.
+        globalmente = 0
+        for fattura in fatture:
+            for valore in fattura["XML"]:
+                chiave = normalizza(valore, regola)
+                globalmente += int(
+                    chiave in riferimento_globale
+                )
+
+        griglia = self.ns["df_griglia_ddt_globale"]
+        riga = griglia.loc[
+            (griglia["CFOR"] == "TUTTI")
+            & (griglia["RegolaDDTXML"] == regola)
+            & (griglia["RegolaDDTCarico"] == regola)
         ]
-        self.assertEqual(len(righe), 1)
-        self.assertEqual(
-            righe.iloc[0]["Azione"], "DA_VERIFICARE"
-        )
+        self.assertEqual(len(riga), 1)
+        self.assertEqual(riga.iloc[0]["Match"], per_fattura)
+        self.assertGreater(globalmente, per_fattura)
 
-    def test_6_cfor_mancante_e_mappa_manuale(self):
-        fornitori = self.ns["df_fornitori_da_mappare"]
-        self.assertIn(
-            "IT09999999999", set(fornitori["PartitaIVA"])
-        )
-        self.assertNotIn(
-            "IT08888888888", set(fornitori["PartitaIVA"])
-        )
-
-        da_verificare = self.ns["df_da_verificare"]
-        mancanti = da_verificare.loc[
-            da_verificare["Azione"] == "CFOR_MANCANTE"
+        # La fattura 00002 ha due DDT XML diversi e un solo DDT carico,
+        # che non è quello dell'altra fattura.
+        fattura_2 = [
+            f for f in fatture
+            if f["ChiaveDocumento"][1] == "00002"
         ]
-        self.assertFalse(mancanti.empty)
-        self.assertTrue((mancanti["CFOR"] == "").all())
-        # Il campo era stato dedotto, ma senza CFOR non si propone.
+        self.assertEqual(len(fattura_2), 1)
         self.assertEqual(
-            mancanti.iloc[0]["CampoCanonico"],
-            "CODICE_FORNITORE",
+            fattura_2[0]["Carico"], {"DIVERSO/77"}
         )
+        self.assertIn("A/001", fattura_2[0]["XML"])
+        self.assertIn("X/1", fattura_2[0]["XML"])
 
-        # Il fornitore mappato a mano produce una proposta vera.
-        proposte = self.ns["df_proposte_xml"]
-        f088 = proposte.loc[proposte["CFOR"] == "F088"]
-        self.assertEqual(len(f088), 1)
+    def test_6_proposte_ddt(self):
+        griglia = self.ns["df_griglia_ddt_globale"]
         self.assertEqual(
-            f088.iloc[0]["Azione"], "AGGIUNGI"
+            len(griglia),
+            len(self.ns["REGOLE_NOMI"]) ** 2,
         )
+
+        def match(r_xml, r_carico):
+            return int(
+                griglia.loc[
+                    (griglia["RegolaDDTXML"] == r_xml)
+                    & (griglia["RegolaDDTCarico"] == r_carico),
+                    "Match",
+                ].iloc[0]
+            )
+
+        self.assertGreater(
+            match("RIMUOVI_SEPARATORI", "RIMUOVI_SEPARATORI"),
+            match("NESSUNA_REGOLA", "NESSUNA_REGOLA"),
+        )
+
+        proposte = self.ns["df_proposte_ddt"].set_index("CFOR")
+        self.assertIn("TUTTI", proposte.index)
+        self.assertIn("F001", proposte.index)
+        self.assertGreater(proposte.loc["TUTTI", "Match"], 0)
         self.assertEqual(
-            f088.iloc[0]["CampoCanonico"],
-            "CODICE_FORNITORE",
+            proposte.loc["TUTTI", "Match"],
+            griglia["Match"].max(),
         )
+        self.assertGreater(proposte.loc["TUTTI", "DDTXML"], 0)
+        self.assertEqual(proposte.loc["TUTTI", "Fatture"],
+                         len(self.ns["fatture"]))
 
-    def test_7_schema_proposte(self):
-        proposte = self.ns["df_proposte_xml"]
-        self.assertFalse(proposte.empty)
-        self.assertEqual(
-            list(proposte.columns[:5]),
-            [
-                "CFOR", "Denominazione", "CodiceTipoXML",
-                "CampoCanonico", "RegolaNormalizzazione",
-            ],
+    def test_7_export_e_dizionario_non_toccato(self):
+        self.assertFalse(
+            any("Dizionario" in p for p in self.letture),
+            "l'assistente ha letto il dizionario",
         )
-        self.assertTrue((proposte["CFOR"] != "").all())
-        self.assertTrue(
-            proposte["CampoCanonico"]
-            .isin(["EAN", "CODICE_CLIENTE", "CODICE_FORNITORE"])
-            .all()
-        )
-        self.assertTrue(
-            proposte["RegolaNormalizzazione"]
-            .isin(self.ns["REGOLE_NOTE"])
-            .all()
-        )
-
-        carico = self.ns["df_proposte_carico"]
-        self.assertEqual(
-            list(carico.columns[:4]),
-            [
-                "CFOR", "Denominazione", "CampoCanonico",
-                "RegolaNormalizzazione",
-            ],
-        )
-        nuove = carico.loc[carico["Azione"] == "AGGIUNGI"]
-        coppie = set(zip(nuove["CFOR"], nuove["CampoCanonico"]))
-        self.assertIn(("F002", "EAN"), coppie)
-        self.assertIn(("F088", "CODICE_FORNITORE"), coppie)
-
-    def test_8_regole_inutilizzate_e_anomalie(self):
-        inutilizzate = self.ns["df_regole_inutilizzate"]
-        self.assertIn(
-            "DESCRIZIONE",
-            set(inutilizzate["CodiceTipoXML"]),
-        )
-
-        anomalie = self.ns["df_anomalie"]
-        valori = set(anomalie["Valore"])
-        self.assertIn("CODICE_FORNTORE", valori)
-        self.assertIn("REGOLA_INVENTATA", valori)
-        self.assertIn(
-            "chiave duplicata",
-            " ".join(anomalie["Problema"]),
-        )
-
-    def test_9_export_e_dizionario_intatto(self):
         self.assertTrue(self.scritture)
         for percorso in self.scritture:
             self.assertEqual(
                 Path(percorso).name,
                 "proposte_dizionario_codici.xlsx",
-                "l'assistente ha scritto un file non previsto",
             )
 
         file_excel = (
@@ -435,48 +459,22 @@ class TestAssistenteDizionario(unittest.TestCase):
 
         cartella_excel = openpyxl.load_workbook(file_excel)
         try:
-            fogli = set(cartella_excel.sheetnames)
+            self.assertEqual(
+                set(cartella_excel.sheetnames),
+                {
+                    "ProposteCodici", "ProposteDDT",
+                    "GrigliaCodici", "GrigliaDDT",
+                },
+            )
         finally:
             cartella_excel.close()
 
-        for atteso in (
-            "ProposteXML", "ProposteCarico", "DaVerificare",
-            "DettaglioTipi", "FornitoriDaMappare",
-            "RegoleInutilizzate", "AnomalieDizionario",
-            "Riepilogo",
-        ):
-            self.assertIn(atteso, fogli)
-
-        # Le righe del dizionario sintetico non sono state modificate.
+        # Il dizionario sintetico resta intatto.
         self.assertEqual(
-            len(dati_sintetici.DIZIONARIO["RegoleCodiciXML"]),
-            10,
+            len(dati_sintetici.DIZIONARIO["RegoleCodiciXML"]), 10
         )
         self.assertEqual(
-            len(dati_sintetici.DIZIONARIO["RegoleCodiciCarico"]),
-            9,
-        )
-
-    def test_10_riepilogo(self):
-        df = self.ns["df_riepilogo"]
-        self.assertEqual(
-            list(df.columns), ["Indicatore", "Valore"]
-        )
-        indicatori = dict(zip(df["Indicatore"], df["Valore"]))
-        self.assertGreater(
-            indicatori["Codici articolo letti"], 0
-        )
-        self.assertGreater(
-            indicatori[
-                "Tipi osservati (CFOR + CodiceTipoXML)"
-            ],
-            0,
-        )
-        self.assertGreater(
-            indicatori[
-                "Righe AGGIUNGI proposte per RegoleCodiciXML"
-            ],
-            0,
+            len(dati_sintetici.DIZIONARIO["RegoleCodiciCarico"]), 9
         )
 
 

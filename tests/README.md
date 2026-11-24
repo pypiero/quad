@@ -2,7 +2,7 @@
 
 Esegue `Quadratura_Fatture.ipynb` e `Assistente_Dizionario_Codici.ipynb` **senza Fabric**: i dati di
 origine sono sintetici, costruiti in memoria. Serve a verificare che una modifica al codice non rompa
-la riconciliazione o la classificazione dei tipi di codice, prima di rieseguire tutto su OneLake.
+la riconciliazione o il banco di prove delle regole, prima di rieseguire tutto su OneLake.
 
 ## Requisiti
 
@@ -34,8 +34,8 @@ controlla l'ordine dei codici XML e la riesecuzione del report senza modificare 
 Il quarto verifica l'export diagnostico attivato e disattivato; il quinto verifica i campi match,
 l'export Excel Power BI opzionale e la diagnostica delle regole. Il sesto verifica la scelta del
 primo valore disponibile, compresi valori mancanti, numeri e date. Il settimo verifica il log
-testuale, gli errori e il flag debug usando un filesystem finto. L'ottavo esegue l'assistente per il
-dizionario codici con gli stessi sostituti (più cinque XML aggiuntivi) e ne controlla le proposte.
+testuale, gli errori e il flag debug usando un filesystem finto. L'ottavo esegue il banco di prove
+per il dizionario codici con gli stessi sostituti (più tre XML aggiuntivi) e ne controlla le griglie.
 Le scritture Delta sono simulate: la compatibilità effettiva con Spark e il Lakehouse va verificata in Fabric.
 
 Esce con:
@@ -102,15 +102,16 @@ il test si adegua da solo.
 
 `test_assistente_dizionario.py` esegue le celle di `Assistente_Dizionario_Codici.ipynb` così come sono,
 con un filesystem finto, le letture Excel sintetiche e l'Excel di output in una cartella temporanea.
-Aggiunge cinque XML ai `XML_FILES` sintetici: un tipo dal nome sconosciuto ma riscontrabile in
-`CART`, un `BARCODE` con GTIN e checksum valido, un `RiferimentoAmministrazione`, due fornitori
-senza carichi (uno mappato a mano con `MAPPA_PIVA_CFOR` iniettata dopo la cella `[1]`).
+Aggiunge tre XML ai `XML_FILES` sintetici: due tipi dal nome inedito ma con valori presenti in
+`CEAN` / `CART` (`GTIN`, `CODICE_27`), un `RiferimentoAmministrazione`, un DDT che combacerebbe con
+quello di **un'altra** fattura se il confronto non fosse per fattura, e un file non FPR12 da scartare.
 
-Copre: lettura dei soli FPR12 e del tipo virtuale; classificazione `EAN` / `FORN` / `CLI` / `COD_F`;
-rifiuto di `MINSAN` e `XYZ`; il tipo nuovo riconosciuto dal solo riscontro in anagrafica; la forma
-GTIN; i `CFOR` mancanti; lo schema delle proposte e delle proposte simmetriche lato carico; regole
-inutilizzate e anomalie; i fogli dell'Excel generato e il fatto che **`Dizionario codici.xlsx` non
-venga mai sovrascritto**.
+Copre: l'identità delle 7 regole con il registro `REGOLE` della quadratura; i codici univoci senza
+colonne di fattura; la griglia con tutte le 147 combinazioni per tipo; le proposte per `EAN` / `FORN`
+/ `CLI` / `COD_F` / `GTIN` / `CODICE_27` e l'assenza di proposte per `MINSAN` / `XYZ`; il confronto
+DDT per fattura (e la dimostrazione che un confronto globale troverebbe un match in più); le
+proposte DDT per `TUTTI` e per `CFOR`; i 4 fogli dell'Excel e il fatto che **`Dizionario codici.xlsx`
+non venga mai letto né scritto**.
 
 ## Provare il test contro un'altra versione del notebook
 

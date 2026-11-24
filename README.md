@@ -9,10 +9,10 @@ Il repository contiene:
 
 ```
 Quadratura_Fatture.ipynb          il processo di quadratura (celle [1]–[18], ognuna preceduta da Markdown)
-Assistente_Dizionario_Codici.ipynb aiutante: scopre i tipi di codice negli XML e propone le righe del dizionario
+Assistente_Dizionario_Codici.ipynb banco di prove: tutte le regole sui codici univoci e sui DDT per fattura
 README.md                         questo file
 docs/LOGICA.md                    guida completa alla logica di quadratura, cella per cella
-docs/ASSISTENTE_DIZIONARIO.md     guida all'assistente: segnali, punteggi, limiti
+docs/ASSISTENTE_DIZIONARIO.md     guida al banco di prove: combinazioni, output, limiti
 tests/                            test eseguibili su dati sintetici
 ```
 
@@ -199,37 +199,24 @@ producono lo stesso effetto e quindi non vengono segnalate come disallineamento.
 
 ### Compilare il dizionario con l'assistente
 
-Sapere **quali** `CodiceTipoXML` arrivano dagli XML è un lavoro manuale: ogni fornitore usa nomi
-diversi (`EAN`, `FORN`, `COD_F`, `CLI`, `MINSAN`, …) e un tipo non censito viene scartato in silenzio
-dalla sezione `[12]`, quindi non contribuisce all'abbinamento.
+Un tipo di codice non censito in `RegoleCodiciXML` viene scartato in silenzio dalla sezione `[12]`.
+[`Assistente_Dizionario_Codici.ipynb`](Assistente_Dizionario_Codici.ipynb) è un **banco di prova**
+autonomo e volutamente semplice: niente alias, punteggi o confidenze, prova tutte le combinazioni
+delle 7 regole sui dati veri e conta i match.
 
-[`Assistente_Dizionario_Codici.ipynb`](Assistente_Dizionario_Codici.ipynb) è un notebook autonomo che
-legge lo stesso `xml.zip` e propone le righe da copiare in `RegoleCodiciXML` (e le corrispondenti
-righe di `RegoleCodiciCarico`). Per ogni coppia `CFOR + CodiceTipoXML` incrocia tre segnali
-indipendenti:
-
-| Segnale | Cosa guarda |
+| Prova | Come |
 |---|---|
-| nome del tipo | dizionario di alias (`EAN`/`GTIN`/`BARCODE`, `FORN`/`SUPPLIER`, `CLI`/`CUSTOMER`, …) |
-| forma del valore | lunghezze GTIN e checksum EAN/GTIN, codici solo numerici o alfanumerici, separatori |
-| riscontro sui dati | il valore, normalizzato, esiste in `CEAN`, in `CART` o in `CARF`/`CALA`? |
+| codici articolo | sui **codici univoci** di tutti gli XML, **senza dividerli per fattura**: per ogni `CodiceTipoXML` prova 3 campi canonici (`EAN`, `CODICE_CLIENTE`, `CODICE_FORNITORE`) × 7 regole lato XML × 7 regole lato carico, confrontandoli con `CEAN`, `CART`, `CARF`/`CALA` |
+| DDT | **dentro ogni fattura** (`CEAS + numero fattura`), altrimenti bolle di fatture diverse si incrociano: prova le 7 × 7 regole su `NumeroDDT` ↔ `NDOGIAB` della stessa fattura |
 
-Dal punteggio combinato esce un `CampoCanonico` (`EAN`, `CODICE_CLIENTE`, `CODICE_FORNITORE`), una
-`RegolaNormalizzazione` e una `Confidenza`. Le righe poco sicure finiscono in un foglio
-`DaVerificare` invece di essere proposte: **l'assistente non scrive mai il dizionario**. Scrive solo
-`export/proposte_dizionario_codici.xlsx`, con anche i fornitori di cui non ha trovato il `CFOR`, le
-regole presenti nel dizionario ma mai osservate negli XML e le eventuali anomalie.
-
-Il limite strutturale è che l'XML **non contiene il `CFOR`**, mentre il dizionario è per fornitore:
-l'assistente lo ricava dai carichi con la stessa coppia `CEAS + NDOGIAA` usata dalla quadratura, con
-ripiego sulla partita IVA e sulla mappa `MAPPA_PIVA_CFOR` (compilabile a mano nella cella `[1]`).
-I dettagli, le soglie e i casi in cui la classificazione automatica non è affidabile sono in
+Le regole sono le stesse del registro `REGOLE` della cella `[4]`; a parità di match vince la meno
+distruttiva. Scrive solo `export/proposte_dizionario_codici.xlsx` con 4 fogli (`ProposteCodici`,
+`ProposteDDT`, `GrigliaCodici`, `GrigliaDDT`): **non legge né scrive `Dizionario codici.xlsx`**, le
+righe si copiano a mano. Dettagli e limiti in
 [`docs/ASSISTENTE_DIZIONARIO.md`](docs/ASSISTENTE_DIZIONARIO.md).
 
-Flusso consigliato: eseguire l'assistente → verificare le proposte (soprattutto `MEDIA`/`BASSA`) →
-copiare le righe `AGGIUNGI` nel dizionario → rieseguire `Quadratura_Fatture.ipynb` → controllare in
-`[12]` che i «Codici esclusi perché il tipo non è nel dizionario» calino e in `[10]` che non restino
-`regole_non_allineate`.
+Dopo aver copiato le regole, rieseguire `Quadratura_Fatture.ipynb` e controllare in `[12]` i «Codici
+esclusi perché il tipo non è nel dizionario» e in `[10]` le `regole_non_allineate`.
 
 ---
 
@@ -490,8 +477,9 @@ python tests/test_assistente_dizionario.py
 
 Sostituisce solo `notebookutils`, le letture Excel e la scrittura su OneLake; il codice del notebook
 viene eseguito così com'è. `test_assistente_dizionario.py` fa lo stesso con
-`Assistente_Dizionario_Codici.ipynb` e controlla che i tipi di codice sintetici vengano classificati,
-che le proposte abbiano lo schema del dizionario e che il dizionario non venga mai sovrascritto.
+`Assistente_Dizionario_Codici.ipynb` e controlla che le regole siano identiche alla quadratura, che
+tutte le combinazioni vengano provate, che i DDT restino dentro la propria fattura e che il
+dizionario non venga mai letto né scritto.
 Esce con `0` se tutti i controlli passano, `1` se qualcuno fallisce. Dettagli in
 [`tests/README.md`](tests/README.md).
 
