@@ -92,8 +92,8 @@ preceduta da una breve cella Markdown che ne descrive il ruolo, oltre a un'intro
 | 13 | XML: righe aggregate | `df_xml_righe` (1 riga per articolo dentro un DDT) |
 | 14 | Abbinamento DDT | `map_ddt` |
 | 15 | Merge finale | `df_merge` (full outer), chiave DDT derivata se l'XML non ha bolla |
-| 16 | Esportazione completa | `export/riconciliazione.xlsx`, un foglio (`df_merge`, 82 colonne) |
-| 17 | Esportazione report Power BI | `df_powerbi` e `export/riconciliazione_powerbi.xlsx` (foglio `df_merge`, 26 colonne) |
+| 16 | Esportazione completa *(opzionale)* | `export/riconciliazione.xlsx`, un foglio (`df_merge`, 82 colonne), se `ESPORTA_DIAGNOSTICA = True` |
+| 17 | Dataset report Power BI | `df_powerbi` (28 colonne); Excel opzionale con `ESPORTA_EXCEL_POWERBI = True` |
 | 18 | Scrittura tabella Delta | tabella `quadratura_powerbi`, sovrascritta solo se `df_powerbi` non è vuoto; i nomi delle colonne di `df_powerbi` vengono modificati sostituendo gli spazi con `_` |
 
 ### Dettagli sulle sorgenti XML
@@ -161,58 +161,14 @@ configurato.
 Il numero di codici esclusi viene stampato **prima** del filtro, perché dopo non sarebbe più
 calcolabile.
 
-La conseguenza pratica è che un tipo nuovo si abilita **solo con una riga nell'Excel**, senza
-toccare il codice. Vale anche per i tipi virtuali che il notebook costruisce da solo: oggi
-`RiferimentoAmministrazione` e `Descrizione`.
+La conseguenza pratica è che un tipo di `CodiceArticolo` nuovo si abilita con una riga nell'Excel,
+senza toccare il codice. Il notebook costruisce anche il tipo virtuale `RiferimentoAmministrazione`.
 
-### La descrizione come codice articolo
-
-Alcuni fornitori scrivono il codice articolo dentro la `Descrizione` invece che in un
-`CodiceArticolo`, come prima o come ultima parola: `1234 melatonina in compresse 1mg` con codice
-cliente `1234`. Per loro la sezione `[3]` produce un codice di tipo virtuale `Descrizione`, con il
-testo della descrizione come valore, **su ogni linea** e senza nessuna condizione — esattamente come
-`RiferimentoAmministrazione`.
-
-È il dizionario a decidere: se il tipo `Descrizione` non è codificato per quel `CFOR`, il codice
-viene scartato dal filtro dei tipi come qualunque altro tipo sconosciuto. Il notebook non fa
-eccezioni né controlli preliminari sulla descrizione.
-
-Non si attiva da solo, ma non per una condizione nel codice: serve **una riga** nel foglio
-`RegoleCodiciXML` per quel fornitore, per esempio:
-
-| `CFOR` | `CodiceTipoXML` | `CampoCanonico` | `RegolaNormalizzazione` |
-|---|---|---|---|
-| `F005` | `Descrizione` | `CODICE_FORNITORE` | `ESTRAI_ULTIMA_STRINGA` |
-| `F005` | `FORN` | `CODICE_FORNITORE` | `RIMUOVI_SEPARATORI` |
-
-Da lì in poi la descrizione segue lo stesso percorso di qualunque altro codice: normalizzazione,
-pivot, `ChiaveArticoloXML`, lookup `CALA`, report.
-
-Quattro cose da tenere presenti:
-
-- **un codice vero vince sempre, nello stesso campo.** Il progressivo della descrizione è sempre
-  l'ultimo della linea, e nel pivot, a parità di campo canonico, vince il progressivo più basso. Se
-  una linea ha `FORN = ART-001` e descrizione `PANE INTEGRALE`, entrambi puntano a
-  `CODICE_FORNITORE`: il report mostra `ART-001`;
-- **negli altri campi la descrizione occupa quello che trova libero.** Su una linea con il solo
-  codice cliente `C002` e descrizione `BURRO`, mappata su `CODICE_FORNITORE`, il report mostra
-  `Codice Art. Fornitore = BURRO`. È un comportamento accettato: se il campo è vuoto e il
-  dizionario dice che quel campo si ricava dalla descrizione, il valore viene usato;
-- **la descrizione entra nella gerarchia alla pari degli altri codici.** Se è mappata su
-  `CODICE_CLIENTE` e la linea ha solo un codice fornitore, il `CART` ricavato dalla descrizione
-  vince sul `FORN` nella chiave articolo, perché `EAN → CART → FORN` è l'ordine della gerarchia.
-  Un valore sbagliato estratto dalla descrizione può quindi oscurare un codice fornitore corretto.
-  Per non avere il problema: mappare la descrizione su `CODICE_FORNITORE`, oppure usarla solo sui
-  fornitori che non mandano nessun `CodiceArticolo`;
-- 
-- **va abilitata fornitore per fornitore.** `ESTRAI_ULTIMA_STRINGA` su una descrizione normale
-  produce risultati inattesi: `PANE INTEGRALE` → `INTEGRALE`, `SCONTO FEDELTA` → `FEDELTA`;
-- **`ESTRAI_ULTIMA_STRINGA` taglia anche sui trattini.** Un codice `ART-222` scritto in coda alla
-  descrizione diventa `222`, perché il trattino conta come separatore. Se il codice del fornitore
-  contiene separatori conviene usare `SOLO_NUMERI` o `RIMUOVI_SEPARATORI` sulla descrizione intera.
-
-Una riga che resta senza codice continua a finire in `ChiaveArticoloXML` come `RIGA DESCRITTIVA|n` o
-con la natura (`SCONTO|n`): la descrizione non toglie mai la rete di sicurezza.
+La **descrizione della linea non viene usata come codice articolo**, neppure se nel dizionario è
+presente una regola `Descrizione`: non viene più creato il relativo codice virtuale. La descrizione
+rimane disponibile per il report. Una riga che non ha altri codici non si abbina grazie al testo della
+descrizione e resta identificata come riga descrittiva (o tramite la natura, se presente). Un eventuale
+`CodiceArticolo` realmente presente nell'XML continua a seguire le normali regole del dizionario.
 
 Una regola scritta male o una cella vuota **non bloccano** l'esecuzione: si applica `RIMUOVI_SEPARATORI` e
 l'anomalia viene elencata nella diagnostica della sezione `[6-bis]` (regole non riconosciute, chiavi
@@ -354,12 +310,15 @@ riga va guardata a mano.
 
 ### `export/riconciliazione.xlsx` — diagnostica
 
-Di default **un solo foglio**, `df_merge`, il risultato del processo. Le altre tabelle sono
-disponibili ma vanno aggiunte a mano in `TABELLE_DA_ESPORTARE`:
+L’export è **disattivato per default**. Per attivarlo, impostare `ESPORTA_DIAGNOSTICA = True`
+nella cella `[1]` e rieseguire il notebook. Quando è attivo esporta un solo foglio, `df_merge`.
+Le altre tabelle sono disponibili ma vanno aggiunte a mano in `TABELLE_DA_ESPORTARE`.
+Se disattivato non viene creato né aggiornato il file; un file precedente resta su OneLake.
+Quando l'export è attivo, i fogli disponibili sono:
 
 | Foglio | Contenuto |
 |---|---|
-| `df_merge` | il risultato del processo (full outer) — esportato sempre |
+| `df_merge` | il risultato del processo (full outer) — esportato quando attivo |
 | `map_ddt` | abbinamento dei DDT fra i due lati |
 | `df_xml_righe` | lato XML alla granularità dell'articolo |
 | `df_fatture` | lato carichi nel perimetro |
@@ -371,9 +330,14 @@ righe **per foglio**. Misurato su 20.000 righe × 82 colonne: 6 fogli con `openp
 23 s, un foglio con `xlsxwriter` 14 s. Il notebook usa `xlsxwriter` quando è disponibile e ricade su
 `openpyxl` altrimenti.
 
-### `export/riconciliazione_powerbi.xlsx` — dataset per il report
+### Dataset Power BI e tabella Delta
 
-Un solo foglio `df_merge`, 26 colonne:
+La cella `[17]` crea `df_powerbi`; la `[18]` lo scrive come tabella Delta `quadratura_powerbi`.
+L'Excel `export/riconciliazione_powerbi.xlsx` è **disattivato per default**; per attivarlo,
+impostare `ESPORTA_EXCEL_POWERBI = True` nella cella `[1]`. Il file eventuale ha un solo foglio
+`df_merge`. Se disattivato, un file precedente non viene aggiornato né eliminato.
+
+Il dataset ha 28 colonne:
 
 ```
 Fattura, Data fattura, Tipologia documento, CEAS, CFOR, Denominazione, Bolla,
@@ -383,8 +347,19 @@ Codice articolo interno, Codice articolo fornitore, Codice EAN,
 Quantità XML, Quantità carico, Differenza quantità (sui valori assoluti),
 Prezzo unitario XML, Prezzo unitario carico,
 Totale XML, Totale Mersy, Differenza totali,
-Stato abbinamento
+Stato abbinamento, Tipo match articolo, Metodo match DDT
 ```
+
+Le ultime due colonne descrivono il match già calcolato, senza modificarlo:
+
+- `Tipo match articolo`: `EAN`, `CART`, `CALA`, `Nessun match` o `Solo carico`.
+- `Metodo match DDT`: metodo della mappa DDT (`TESTO`, `DATA_UNIVOCA`, `UNICO_RESIDUO`,
+  `UNICO_RESIDUO_DATA_MANCANTE`); vuoto quando non disponibile.
+
+Il metodo DDT è vuoto sulle righe `Solo carico` e quando la chiave DDT è dedotta dal carico:
+non significa necessariamente che la bolla non sia stata abbinata. Il campo `Stato DDT` resta la vista del risultato a livello di bolla.
+Nella tabella Delta gli spazi nei nomi delle colonne diventano `_`. La tabella viene sovrascritta
+insieme al suo schema: eventuali report Power BI esistenti devono considerare le nuove colonne.
 
 Note sulle colonne di anagrafica:
 
@@ -425,6 +400,32 @@ Il file contiene valori, non formule: nessun ricalcolo lato Excel.
 
 ## 9. Requisiti ed esecuzione
 
+### Log e debug
+
+Ogni esecuzione avviata dalla cella `[1]` crea un file `.txt` distinto in
+`Files/log/quadratura/`. Il nome contiene l'ora italiana (`Europe/Rome`) e il relativo offset,
+considerando automaticamente ora legale e solare. Il percorso viene stampato nel notebook; gli
+orari dentro il file sono invece in UTC e riportano esplicitamente questa indicazione.
+All'inizio lo stato è `IN_CORSO`; la cella `[18]` lo aggiorna con tempi, conteggi, anomalie e risultato della scrittura
+Delta. Dei primi 100 XML non leggibili sono elencati nome ed errore; il conteggio totale è sempre
+riportato e non viene salvato il contenuto dei file.
+
+- `OK`: tabella aggiornata, nessuno degli avvisi rilevati nel riepilogo.
+- `OK_CON_AVVISI`: ad esempio XML non leggibili, anomalie del dizionario, o tabella non scritta.
+  Gli XML non leggibili **non bloccano** la pubblicazione, che può quindi essere parziale.
+- `ERRORE`: errore intercettato durante la scrittura Delta, che viene comunque rilanciato.
+  In questo caso la scrittura è indicata come `NON_CONFERMATA`, non come certamente annullata.
+- `IN_CORSO`: la cella finale non ha aggiornato il log. Può indicare un'elaborazione ancora in corso,
+  un'interruzione o un errore in una cella precedente: controllare l'esito e l'output del notebook
+  o della pipeline. Non equivale a un successo né contiene necessariamente il dettaglio dell'errore.
+
+Per mostrare anche anteprime e riepiloghi facoltativi, impostare `DEBUG = True` nella cella `[1]`.
+Gli avvisi e i controlli restano attivi anche con `DEBUG = False`. Il log richiede permessi di
+scrittura su OneLake e può contenere nomi di file e messaggi d'errore: limitarne l'accesso e definire
+una politica di conservazione. Se la scrittura del log finale fallisce dopo la scrittura Delta,
+la tabella può essere già aggiornata; verificare l'output dell'esecuzione.
+
+
 - Runtime **Fabric / Synapse** con `notebookutils` (accesso a OneLake) e `openpyxl`.
 - Per `[18]` occorrono una sessione Spark e un Lakehouse predefinito accessibile in scrittura:
   la tabella `quadratura_powerbi`, se già presente, viene sovrascritta insieme al suo schema.
@@ -462,9 +463,8 @@ Dettagli in [`tests/README.md`](tests/README.md).
   fornitore, che in quel caso manca. Il caso è oggi considerato non significativo — si assume che
   ogni fattura abbia almeno un carico — ma è documentato nella cella del report insieme alle
   possibili strade, se in futuro non fosse più vero.
-- `RiferimentoAmministrazione` e `Descrizione` sono tipi virtuali trattati come normali
-  `CodiceArticolo`: partecipano solo se il dizionario li codifica per quel fornitore. Un
-  trattamento dedicato va deciso.
+- `RiferimentoAmministrazione` è un tipo virtuale trattato come normale `CodiceArticolo` se
+  codificato nel dizionario; il testo della descrizione non è più usato per ricavare codici.
 - Se una fattura risulta associata a più `CFOR` il notebook lo segnala e tiene il primo in ordine
   alfabetico (sezione `[11]`).
 - La numerazione `Indice` è progressiva **dopo** i filtri: non è stabile fra esecuzioni diverse se

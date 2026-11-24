@@ -35,7 +35,18 @@ NOTEBOOK = Path(
 
 
 class _FilesystemFinto:
-    """Sostituisce notebookutils.fs: il notebook crede di lavorare."""
+    """Sostituisce notebookutils.fs e registra i log in memoria."""
+
+    def __init__(self):
+        self.file_scritti = {}
+        self.scritture = []
+
+    def put(self, percorso, contenuto, overwrite=False):
+        if not overwrite and percorso in self.file_scritti:
+            return False
+        self.file_scritti[percorso] = contenuto
+        self.scritture.append((percorso, contenuto))
+        return True
 
     def exists(self, percorso):
         return True
@@ -51,7 +62,8 @@ class _FilesystemFinto:
 
 
 class _NotebookutilsFinto:
-    fs = _FilesystemFinto()
+    def __init__(self):
+        self.fs = _FilesystemFinto()
 
 
 class _ScrittoreDeltaFinto:
@@ -181,13 +193,14 @@ def _lettura_excel_finta(percorso, sheet_name=None, **kwargs):
     )
 
 
-def esegui_notebook(percorso_notebook=NOTEBOOK, cartella_output=None):
+def esegui_notebook(percorso_notebook=NOTEBOOK, cartella_output=None, esporta_excel_powerbi=None):
     """
     Esegue le celle del notebook e restituisce il namespace finale
     (con dentro df_merge, df_fatture, map_ddt, ...).
 
     Se cartella_output è indicata, i file Excel prodotti vengono
-    scritti lì; altrimenti in una cartella temporanea.
+    scritti lì; altrimenti in una cartella temporanea. Il parametro opzionale
+    esporta_excel_powerbi sovrascrive il flag di configurazione nei test.
     """
 
     celle = _leggi_celle(percorso_notebook)
@@ -222,6 +235,8 @@ def esegui_notebook(percorso_notebook=NOTEBOOK, cartella_output=None):
     try:
         for indice, codice_cella in enumerate(celle, start=1):
             exec(compile(codice_cella, f"cella_{indice}", "exec"), namespace)
+            if indice == 1 and esporta_excel_powerbi is not None:
+                namespace["ESPORTA_EXCEL_POWERBI"] = esporta_excel_powerbi
     finally:
         pd.read_excel = lettura_originale
         pd.ExcelWriter = scrittore_originale

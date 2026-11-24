@@ -166,7 +166,7 @@ partenza, perché è da lì che il report prende i codici da mostrare.
 | `df_fatture` | riga di carico | [7]-[10] |
 | `map_ddt` | coppia DDT XML ↔ DDT carico | [14] |
 | `df_merge` | riga riconciliata (XML, carico o entrambe) | [15] |
-| `df_powerbi` | come `df_merge`, 26 colonne | [17] |
+| `df_powerbi` | come `df_merge`, 28 colonne | [17] |
 
 **Questo è il punto più importante da capire**: i due lati arrivano al merge con granularità
 diverse. L'XML parte da *linee* e arriva ad *articoli*; i carichi partono già da *articoli*. Se le
@@ -212,7 +212,8 @@ con il titolo `## [n] ...`.
 
 ### [1] Configurazione
 
-Un unico punto in cui si dichiara dove stanno le cose. Nessuna logica.
+Un unico punto in cui si dichiarano le sorgenti e i flag; viene anche avviato il log testuale.
+Il riepilogo finale è scritto dalla cella `[18]`; le modalità e i limiti sono descritti nel README.
 
 | Variabile | Uso |
 |---|---|
@@ -284,22 +285,10 @@ descrizione, quantità, unità di misura, prezzo unitario, prezzo totale, riferi
 `NESSUN_DDT`).
 
 Per ogni `CodiceArticolo` produce una riga in formato **lungo** (`CodiceTipoXML`, `CodiceValoreXML`).
-Altre due righe vengono aggiunte senza condizioni:
-
-- `RiferimentoAmministrazione`, quando presente;
-- `Descrizione`, quando presente, con `CodiceTipoXML = "Descrizione"`.
-
-La descrizione è quindi un tipo di codice come gli altri, con il progressivo più alto della linea.
-Non si decide qui se serve: se il dizionario non la codifica, il filtro della cella [12] la scarta.
-Il progressivo alto serve al pivot: a parità di campo canonico vince il codice con il progressivo più
-basso, quindi un `CodiceArticolo` vero non viene mai scavalcato dalla descrizione nello stesso
-campo.
-
-Su campi diversi vale invece la gerarchia della chiave (`EAN → CART → FORN`): se la descrizione è
-mappata su `CODICE_CLIENTE` e la linea porta solo un codice fornitore, il `CART` ricavato dalla
-descrizione vince sul `FORN`. È la conseguenza diretta di trattare la descrizione come un codice
-qualsiasi, ed è accettata.
-
+Se presente viene aggiunto anche il tipo virtuale `RiferimentoAmministrazione`. La descrizione della
+linea rimane nei dati e nel report, ma non viene più aggiunta come codice virtuale, anche se esiste
+una regola `Descrizione` nel dizionario. Le righe senza altri codici non vengono abbinate tramite
+il testo della descrizione; i `CodiceArticolo` effettivamente presenti nell'XML restano utilizzabili.
 
 Alla fine: conversione dei tipi (`DataFattura` e `DataDDT` a data, campi numerici a numero con
 `errors="coerce"`) e ordinamento stabile.
@@ -471,8 +460,8 @@ si riportano nel DataFrame. I valori originali restano.
 | `CART` | `CART_Chiave` | `RegoleCodiciCarico` (`CODICE_CLIENTE`) |
 | `CALA` (da `CARF`) | `CALA_Chiave` | `RegoleCodiciCarico` (`CODICE_FORNITORE`) |
 
-La sezione stampa un riepilogo per campo (valori distinti, chiavi distinte, valori modificati dalla
-normalizzazione) e **segnala i `CampoCanonico` non riconosciuti**: un refuso come `CODICE_FORNTORE`
+Con `DEBUG = True` la sezione stampa un riepilogo per campo (valori distinti, chiavi distinte,
+valori modificati dalla normalizzazione). In ogni caso **segnala i `CampoCanonico` non riconosciuti**: un refuso come `CODICE_FORNTORE`
 invece di `CODICE_FORNITORE` renderebbe la regola invisibile, e senza questo controllo passerebbe
 inosservato.
 
@@ -534,9 +523,8 @@ comunque contribuito alla chiave articolo: sarebbe finito in una colonna `NON_MA
 gerarchia non guarda. Il conteggio degli esclusi viene stampato **prima** del filtro, perché dopo non
 sarebbe più ricavabile.
 
-È questa la ragione per cui un tipo nuovo — compresi i virtuali `RiferimentoAmministrazione` e
-`Descrizione` costruiti dalla cella `[3]` — si abilita con una riga nell'Excel e non con una modifica
-al codice.
+Un tipo `CodiceArticolo` nuovo o il tipo virtuale `RiferimentoAmministrazione` si abilita
+con una riga nell'Excel, senza modificare il codice. La descrizione non è più un tipo virtuale.
 
 ### [13] Righe aggregate (`df_xml_righe`)
 
@@ -712,10 +700,11 @@ Restano fuori dalla tabella due casi che non sono bolle: l'XML senza DDT con pi�
 
 ### [16] Export diagnostico
 
-Di default un solo foglio in `export/riconciliazione.xlsx`: `df_merge`. È il file da aprire quando
-un abbinamento non torna, e le altre tabelle (`map_ddt`, `df_xml_righe`, `df_fatture`,
-`df_xml_fatture`, `df_xml_codici_articolo`) si aggiungono a mano in `TABELLE_DA_ESPORTARE` quando
-servono.
+L’export è disattivato per default; si attiva impostando `ESPORTA_DIAGNOSTICA = True` nella
+cella `[1]`. Quando è attivo scrive un solo foglio in `export/riconciliazione.xlsx`: `df_merge`.
+Un file precedente non viene eliminato quando l’export è disattivato. Le altre tabelle (`map_ddt`,
+`df_xml_righe`, `df_fatture`, `df_xml_fatture`, `df_xml_codici_articolo`) si aggiungono a mano
+in `TABELLE_DA_ESPORTARE` quando servono.
 
 Il motivo è il costo della scrittura: `df_merge` ha 82 colonne e Excel costa circa un secondo ogni
 1.000 righe per foglio. L'engine è `xlsxwriter` se installato, altrimenti `openpyxl`.
@@ -724,15 +713,24 @@ Il motivo è il costo della scrittura: `df_merge` ha 82 colonne e Excel costa ci
 
 ## 6. Il blocco finale: il report
 
-La cella `[17]` del notebook costruisce `df_powerbi` e lo salva in
-`export/riconciliazione_powerbi.xlsx` (un foglio, 26 colonne). La cella `[18]` scrive lo stesso
+La cella `[17]` del notebook costruisce `df_powerbi` (28 colonne) e, solo se
+`ESPORTA_EXCEL_POWERBI = True` nella cella `[1]`, lo salva in
+`export/riconciliazione_powerbi.xlsx` (un foglio). Un file Excel precedente non viene aggiornato
+né eliminato se l’export è disattivato. La cella `[18]` scrive lo stesso
 dataset come tabella Delta `quadratura_powerbi` nel Lakehouse predefinito di Fabric, sostituendo
 gli spazi nei nomi delle colonne con `_` direttamente in `df_powerbi`. L'Excel scritto dalla
 cella `[17]` mantiene i nomi originali con gli spazi.
 Se il DataFrame non è vuoto, la tabella esistente e il suo schema vengono sovrascritti; altrimenti
 non viene effettuata alcuna scrittura. Servono una sessione Spark e permessi di scrittura sul Lakehouse.
 
-### 6.1 `coalesce_colonne`
+Due colonne riportano direttamente informazioni già calcolate nel merge: `Tipo match articolo`
+(`TipoMatch`) e `Metodo match DDT` (`MetodoMatchDDT`). Il metodo è vuoto se l'informazione
+non è disponibile, ad esempio sulle righe `Solo carico` o quando la chiave è dedotta dal carico:
+non va interpretato come indicazione che la bolla non sia abbinata.
+`Stato DDT` resta lo stato a livello di bolla. Le colonne vengono riportate nella tabella Delta
+con gli spazi sostituiti da `_`.
+
+### 6.1 `primo_valore_disponibile`
 
 Il cuore del report. Riceve un elenco ordinato di colonne e restituisce, riga per riga, **il primo
 valore valido** da sinistra a destra. Prima di confrontare, le colonne testuali vengono pulite
@@ -784,7 +782,7 @@ credito possono avere segno opposto per motivi contabili e non solo per come è 
 restano vuote. È corretto: una bolla non ancora consegnata non ha punto di consegna, e nell'XML il
 `CEAS` non è un dato del documento ma il nome del file.
 
-Le differenze si calcolano **dopo** il coalesce: se manca un lato, la differenza è vuota (non zero).
+Le differenze si calcolano **dopo** la scelta del primo valore disponibile: se manca un lato, la differenza è vuota (non zero).
 Questo è voluto: "non ho il dato" e "differenza zero" sono due cose diverse.
 
 ### 6.3 La denominazione e il suo limite
@@ -891,7 +889,7 @@ Parti sempre dal sintomo.
 | una riga è `Solo carico` | [15] | `Indice` mai raggiunto: la riga XML esiste ma con DDT o codice diverso |
 | differenze quantità a zero ma prezzi diversi | report | il match è avvenuto sull'articolo giusto ma su un'altra riga di carico (vince l'`Indice` più basso) |
 | stesso articolo due volte | [12] | `ChiaveArticoloXML` diversa: uno dei due tipi di codice non è nel dizionario e viene scartato, oppure punta a un altro campo canonico |
-| colonna del report vuota | blocco finale | guarda la catena del `coalesce` per quella colonna |
+| colonna del report vuota | blocco finale | guarda le priorità dei valori per quella colonna |
 | regola ignorata | [6-bis] | `Anomalie`: `NON RICONOSCIUTA` |
 | `IndexError`/`ValueError` in [13] | [13] | colonna sia chiave sia output; `DataDDT` è il caso già noto |
 
@@ -914,9 +912,8 @@ cui intervenire.
   sono lette e portate nel merge, ma non usate nelle regole;
 - **non estrae `AliquotaIVA`** né `CodiceFiscale` di linea: se servissero, la sezione [13] li
   aggregherebbe da sola una volta presenti in `df_xml_fatture`;
-- **tratta `RiferimentoAmministrazione` e `Descrizione`** come normali codici articolo: sono tipi
-  virtuali e si attivano solo se il dizionario li codifica per quel fornitore. Un trattamento
-  dedicato è una decisione ancora aperta;
+- **tratta `RiferimentoAmministrazione`** come codice articolo virtuale se il dizionario lo
+  codifica; la descrizione non viene più usata per ricavare codici;
 - **non è incrementale**: ricalcola tutto a ogni esecuzione. Non c'è memoria fra un run e l'altro, e
   `Indice` non è stabile se cambia il perimetro.
 
@@ -981,7 +978,7 @@ Contiene tutto `df_xml_righe` (23 colonne), tutte le colonne dei carichi (26), i
 `NumeroRigheFattura`, `NumeroRigheFatturaGlobale`, `DDTCarico*`), gli stati (`TipoMatch`,
 `StatoDocumento`, `StatoAbbinamento`) e `NumeroDDT_Comune`.
 
-### `df_powerbi` (26 colonne, il report)
+### `df_powerbi` (28 colonne, il report)
 
 ```
 Fattura, Data fattura, Tipologia documento, CEAS, CFOR, Denominazione, Bolla,
@@ -990,7 +987,7 @@ Unità di misura,
 Codice articolo interno, Codice articolo fornitore, Codice EAN,
 Quantità XML, Quantità carico, Differenza quantità, Prezzo unitario XML,
 Prezzo unitario carico, Totale XML, Totale Mersy, Differenza totali,
-Stato abbinamento
+Stato abbinamento, Tipo match articolo, Metodo match DDT
 ```
 
 ### Funzioni, sezione per sezione
@@ -1006,7 +1003,7 @@ Stato abbinamento
 | [13] | `campo_pivot`, `chiave_articolo_xml`, `somma_o_nulla`, `numeri_linea_xml` |
 | [14] | `valore_valido`, `maschera_valida`, `primo_valido`, `abbina_gruppo` |
 | [15] | `crea_lookup_codice`, `tipo_match`, `stato_documento`, `stato_abbinamento`, `numero_ddt_comune`, `stato_ddt_riga` |
-| [17] (report) | `pulisci_testo`, `coalesce_colonne`, `crea_etichetta_fornitore` |
+| [17] (report) | `pulisci_testo`, `primo_valore_disponibile`, `crea_etichetta_fornitore` |
 
 ---
 
